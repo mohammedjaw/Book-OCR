@@ -5,3 +5,9 @@
 - PDF viewer structure
 - Gemini API settings
 - Arabic RTL interface
+
+# Version 0.2.1
+- Added page-level database records
+- Added single-page Gemini OCR testing
+- Added OCR page status tracking
+- Added extracted text display
