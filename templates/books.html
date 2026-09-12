@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<h1>الكتب</h1><a class="button" href="/books/new">رفع كتاب جديد</a><div class="list">{% for b in books %}<div class="card"><h2><a href="/books/{{b.book_uuid}}">{{b.title}}</a></h2><p>{{b.original_filename}}</p><span>{{b.page_count}} صفحة · {{b.status}}</span></div>{% else %}<p>لا توجد كتب.</p>{% endfor %}</div>{% endblock %}

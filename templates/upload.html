@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<h1>رفع كتاب</h1>{% if error %}<div class="error">{{error}}</div>{% endif %}<form method="post" enctype="multipart/form-data"><input type="file" name="file" accept="application/pdf" required><button>حفظ الكتاب</button></form>{% endblock %}
