@@ -4,6 +4,9 @@ from fastapi.templating import Jinja2Templates
 from ..database import connect
 from ..book_manager import add_book
 from ..ocr_service import extract_page
+from ..ocr_worker import start, pause, active, recover_stale
+from ..export_service import make_json, make_docx, book_data
+from fastapi.responses import FileResponse
 templates=Jinja2Templates(directory="templates"); router=APIRouter()
 @router.get("/books")
 def books(request:Request):
@@ -12,23 +15,71 @@ def books(request:Request):
 @router.get("/books/new")
 def upload(request:Request): return templates.TemplateResponse(request=request, name="upload.html", context={"error":None})
 @router.post("/books/new")
-def upload_post(request:Request, file:UploadFile=File(...)):
-    try: uid=add_book(file); return RedirectResponse(f"/books/{uid}",303)
+def upload_post(request:Request, file:UploadFile=File(...), title:str=Form("")):
+    try: uid=add_book(file,title); return RedirectResponse(f"/books/{uid}",303)
     except ValueError as e: return templates.TemplateResponse(request=request, name="upload.html", context={"error":str(e)},status_code=400)
 @router.get("/books/{uid}")
 def detail(request:Request,uid:str):
-    with connect() as db:
-        book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone()
-        stats=db.execute("SELECT status,COUNT(*) count FROM book_pages WHERE book_id=? GROUP BY status",(book['id'],)).fetchall() if book else []
-        pages=db.execute("SELECT * FROM book_pages WHERE book_id=? ORDER BY page_number",(book['id'],)).fetchall() if book else []
-    return templates.TemplateResponse(request=request, name="book_detail.html", context={"book":book,"counts":{r['status']:r['count'] for r in stats},"pages":pages,"error":None})
+    return render_detail(request, uid)
 @router.post("/books/{uid}/ocr")
 def ocr(request:Request,uid:str,page_number:int=Form(...)):
     with connect() as db: book=db.execute("SELECT id FROM books WHERE book_uuid=?",(uid,)).fetchone()
     if book:
         try: extract_page(book['id'],page_number)
-        except ValueError: pass
-    return detail(request,uid)
+        except ValueError as error:
+            return render_detail(request,uid,error=str(error))
+    return render_detail(request,uid,success='تم استخراج الصفحة بنجاح')
+@router.get('/books/{uid}/ocr/status')
+def ocr_status(uid:str):
+    with connect() as db:
+        book=db.execute('SELECT id,page_count FROM books WHERE book_uuid=?',(uid,)).fetchone()
+        rows=db.execute('SELECT status,COUNT(*) count FROM book_pages WHERE book_id=? GROUP BY status',(book['id'],)).fetchall()
+    return {'total':book['page_count'],'counts':{r['status']:r['count'] for r in rows},'active':active(book['id'])}
+
+def render_detail(request:Request,uid:str,error=None,success=None):
+    with connect() as db:
+        book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone()
+        stats=db.execute("SELECT status,COUNT(*) count FROM book_pages WHERE book_id=? GROUP BY status",(book['id'],)).fetchall() if book else []
+        pages=db.execute("SELECT * FROM book_pages WHERE book_id=? ORDER BY page_number",(book['id'],)).fetchall() if book else []
+    return templates.TemplateResponse(request=request,name="book_detail.html",context={"book":book,"counts":{r['status']:r['count'] for r in stats},"pages":pages,"error":error,"success":success,"active":active(book['id']) if book else False})
+
+@router.post("/books/{uid}/ocr/start")
+def start_ocr(request:Request,uid:str):
+    recover_stale()
+    with connect() as db: book=db.execute("SELECT id FROM books WHERE book_uuid=?",(uid,)).fetchone()
+    if book: start(book['id'])
+    return RedirectResponse(f"/books/{uid}",303)
+@router.post("/books/{uid}/ocr/pause")
+def pause_ocr(uid:str):
+    with connect() as db: book=db.execute("SELECT id FROM books WHERE book_uuid=?",(uid,)).fetchone()
+    if book: pause(book['id'])
+    return RedirectResponse(f"/books/{uid}",303)
+@router.post("/books/{uid}/ocr/resume")
+def resume_ocr(request:Request,uid:str): return start_ocr(request,uid)
+@router.post("/books/{uid}/ocr/retry")
+def retry_ocr(request:Request,uid:str):
+    with connect() as db: book=db.execute("SELECT id FROM books WHERE book_uuid=?",(uid,)).fetchone()
+    if book: start(book['id'],retry_failed=True)
+    return RedirectResponse(f"/books/{uid}",303)
+@router.get("/books/{uid}/pages")
+def pages(request:Request,uid:str,status:str='all'):
+    with connect() as db:
+        book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone()
+        query="SELECT * FROM book_pages WHERE book_id=?"; args=[book['id']]
+        if status in ('completed','failed','pending'): query += " AND status=?"; args.append(status)
+        rows=db.execute(query+" ORDER BY page_number",args).fetchall()
+    return templates.TemplateResponse(request=request,name="pages.html",context={"book":book,"pages":rows,"status":status})
+@router.get("/books/{uid}/pages/{page_number}")
+def page_detail(request:Request,uid:str,page_number:int):
+    with connect() as db:
+        book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone(); page=db.execute("SELECT * FROM book_pages WHERE book_id=? AND page_number=?",(book['id'],page_number)).fetchone()
+    return templates.TemplateResponse(request=request,name="page_detail.html",context={"book":book,"page":page})
+@router.get('/books/{uid}/export/json')
+def export_json(uid:str):
+    path,name=make_json(uid); return FileResponse(path,media_type='application/json',filename=name)
+@router.get('/books/{uid}/export/docx')
+def export_docx(uid:str):
+    path,name=make_docx(uid); return FileResponse(path,media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',filename=name)
 @router.get("/books/{uid}/view")
 def view(request:Request,uid:str,page:int=1):
     with connect() as db: book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone()
@@ -37,3 +88,13 @@ def view(request:Request,uid:str,page:int=1):
 def file(uid:str):
     with connect() as db: book=db.execute("SELECT file_path FROM books WHERE book_uuid=?",(uid,)).fetchone()
     return FileResponse(book["file_path"],media_type="application/pdf")
+@router.post('/books/{uid}/delete')
+def delete_book(uid:str):
+    with connect() as db: book=db.execute('SELECT id,file_path FROM books WHERE book_uuid=?',(uid,)).fetchone()
+    if not book: return RedirectResponse('/books',303)
+    pause(book['id'])
+    with connect() as db:
+        db.execute('BEGIN'); db.execute('DELETE FROM book_pages WHERE book_id=?',(book['id'],)); db.execute('DELETE FROM books WHERE id=?',(book['id'],)); db.commit()
+    from pathlib import Path
+    Path(book['file_path']).unlink(missing_ok=True)
+    return RedirectResponse('/books?message=تم+حذف+الكتاب+بنجاح',303)
