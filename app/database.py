@@ -19,6 +19,7 @@ def init_db():
           status TEXT NOT NULL DEFAULT 'جاهز', created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS book_pages (id INTEGER PRIMARY KEY, book_id INTEGER NOT NULL, page_number INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'pending', extracted_text TEXT, line_count INTEGER, model TEXT, thinking_level TEXT, error_message TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(book_id,page_number));
+        CREATE VIRTUAL TABLE IF NOT EXISTS page_search USING fts5(page_id UNINDEXED, exact_text, normalized_text);
         INSERT OR IGNORE INTO settings(key,value) VALUES ('gemini_model','gemini-3.1-flash-lite'),('thinking_level','minimal'),('max_concurrent_pages','3');
         """)
         legacy = db.execute("SELECT value FROM settings WHERE key='gemini_api_key'").fetchone()

@@ -44,8 +44,12 @@ def save_settings(
     model: str = Form(""),
     thinking: str = Form("minimal"),
     concurrency: int = Form(3),
+    font_family: str = Form("Noto Naskh Arabic"),
+    font_size: int = Form(22),
+    line_height: float = Form(1.8),
+    theme: str = Form('تلقائي'),
 ):
-    api_key = api_key.strip(); concurrency=max(1,min(5,concurrency))
+    api_key = api_key.strip(); concurrency=max(1,min(5,concurrency)); font_size=max(14,min(36,font_size)); line_height=max(1.4,min(2.4,line_height))
 
     secrets = load_secrets()
     old_key = secrets.get("gemini_api_key", "")
@@ -85,6 +89,10 @@ def save_settings(
             ("thinking_level", thinking.strip() or "minimal"),
         )
         db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", ("max_concurrent_pages", str(concurrency)))
+        db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", ("font_family", font_family.strip() or "Noto Naskh Arabic"))
+        db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", ("font_size", str(font_size)))
+        db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", ("line_height", str(line_height)))
+        db.execute("INSERT OR REPLACE INTO settings VALUES (?, ?)", ("theme", theme if theme in ('فاتح','داكن','تلقائي') else 'تلقائي'))
 
     return templates.TemplateResponse(
         request=request,

@@ -4,6 +4,7 @@ import pymupdf
 from .database import connect
 from .ocr_prompt import OCR_SYSTEM_INSTRUCTION
 from .secrets import load_secrets
+from .search_service import index_page
 
 def extract_page(book_id, page_number):
     from google import genai
@@ -30,6 +31,8 @@ def extract_page(book_id, page_number):
                 time.sleep(2 ** attempt)
         text=response.text or ''; now=datetime.now().isoformat(timespec='seconds')
         with connect() as db: db.execute("UPDATE book_pages SET status='completed',extracted_text=?,line_count=?,model=?,thinking_level=?,error_message=NULL,updated_at=? WHERE book_id=? AND page_number=?",(text,len(text.splitlines()),model,thinking,now,book_id,page_number))
+        with connect() as db: page_id=db.execute('SELECT id FROM book_pages WHERE book_id=? AND page_number=?',(book_id,page_number)).fetchone()['id']
+        index_page(page_id,text)
     except Exception as exc:
         detail = str(exc).replace(key, '[مخفي]')[:300]
         message = ('رقم الصفحة غير صالح' if isinstance(exc, ValueError) else type(exc).__name__ + ': ' + detail)

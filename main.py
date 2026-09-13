@@ -4,11 +4,13 @@ from fastapi.templating import Jinja2Templates
 from pathlib import Path
 from app.database import init_db
 from app.routes import home, books, settings, search, transfer
+from app.search_service import rebuild_search_index
 
 BASE = Path(__file__).parent
 for folder in ("data", "books", "exports", "config", "static/css", "static/js", "static/pdfjs"):
     (BASE / folder).mkdir(parents=True, exist_ok=True)
 init_db()
+rebuild_search_index()
 
 app = FastAPI(title="مكتبة Book-OCR", version="0.1.0")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
