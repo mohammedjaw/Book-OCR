@@ -19,27 +19,34 @@
     return Promise.resolve(fallback(value));
   }
   function feedback(ok) {
-    status.textContent = ok ? full.title : '';
+    status.textContent = ok ? status.dataset.success : '';
     clearTimeout(timer); timer = setTimeout(() => { status.textContent = ''; }, 1800);
   }
-  full.addEventListener('click', () => copy(text.innerText).then(feedback));
+  full.addEventListener('click', () => copy(text.textContent).then(feedback));
+  function hideSelectionButton() { selectionButton.hidden = true; }
   function updateSelection() {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim() || !selection.anchorNode || !text.contains(selection.anchorNode) || !text.contains(selection.focusNode)) {
-      selectionButton.hidden = true; return;
+      hideSelectionButton(); return;
     }
     const rect = selection.getRangeAt(0).getBoundingClientRect();
-    const parent = area.getBoundingClientRect();
-    selectionButton.style.left = Math.max(4, rect.left - parent.left + rect.width / 2 - 30) + 'px';
-    selectionButton.style.top = Math.max(4, rect.top - parent.top - 42) + 'px';
     selectionButton.hidden = false;
+    const gap = 8; const buttonRect = selectionButton.getBoundingClientRect();
+    let left = rect.left + rect.width / 2 - buttonRect.width / 2;
+    let top = rect.top - buttonRect.height - gap;
+    if (top < gap) top = Math.min(window.innerHeight - buttonRect.height - gap, rect.bottom + gap);
+    left = Math.max(gap, Math.min(left, window.innerWidth - buttonRect.width - gap));
+    top = Math.max(gap, Math.min(top, window.innerHeight - buttonRect.height - gap));
+    selectionButton.style.left = left + 'px'; selectionButton.style.top = top + 'px';
   }
   document.addEventListener('selectionchange', updateSelection);
-  document.addEventListener('mousedown', (event) => { if (!area.contains(event.target)) selectionButton.hidden = true; });
+  document.addEventListener('mousedown', (event) => { if (!area.contains(event.target)) hideSelectionButton(); });
+  window.addEventListener('scroll', hideSelectionButton, true);
+  window.addEventListener('resize', hideSelectionButton);
   selectionButton.addEventListener('mousedown', (event) => event.preventDefault());
   selectionButton.addEventListener('click', () => {
     const selection = window.getSelection(); const value = selection ? selection.toString() : '';
-    if (value.trim()) copy(value).then(() => { selectionButton.hidden = true; feedback(true); });
+    if (value.trim()) copy(value).then(() => { hideSelectionButton(); feedback(true); });
   });
   selectionButton.hidden = true;
 }());

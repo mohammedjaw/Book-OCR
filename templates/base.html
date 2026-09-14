@@ -1,4 +1,4 @@
 <!doctype html>
 <html lang="{{lang}}" dir="{{'ltr' if lang=='en' else 'rtl'}}" data-theme="{{prefs.theme or 'تلقائي'}}">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title or 'Book-OCR' }}</title><link rel="stylesheet" href="/static/css/style.css?v=stabilization-1"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title or 'Book-OCR' }}</title><link rel="stylesheet" href="/static/css/style.css?v=reader-polish-1"></head>
 <body><nav>{% for path,key in [('/','home'),('/books','books'),('/books/new','upload'),('/search','search'),('/transfer','transfer'),('/settings','settings')] %}<a href="{{path}}">{{tr(key)}}</a>{% endfor %}</nav><main>{% block content %}{% endblock %}</main></body></html>

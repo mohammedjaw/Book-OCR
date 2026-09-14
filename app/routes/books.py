@@ -10,6 +10,7 @@ from ..ocr_worker import start, pause, active, state, rerender_failed_page, RETR
 from ..search_service import highlight_text, count_matches, search_pages, parse_scope
 from ..package_service import export_package
 from ..export_service import make_json, make_docx, book_data
+from urllib.parse import urlencode
 from fastapi.responses import FileResponse
 from ..ui import templates; router=APIRouter()
 @router.get("/books")
@@ -101,6 +102,7 @@ def page_detail(request:Request,uid:str,page_number:int,q:str='',mode:str='exact
     require_book(uid)
     with connect() as db:
         book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone(); page=db.execute("SELECT * FROM book_pages WHERE book_id=? AND page_number=?",(book['id'],page_number)).fetchone()
+        collection=db.execute("SELECT c.uuid,c.title FROM collections c WHERE c.id=?",(book['collection_id'],)).fetchone() if book['collection_id'] else None
     if not page: raise HTTPException(404, 'Page not found')
     with connect() as db: settings={r['key']:r['value'] for r in db.execute('SELECT * FROM settings')}
     with connect() as db: word_ready = db.execute("SELECT COUNT(*)=b.page_count FROM book_pages p JOIN books b ON b.id=p.book_id WHERE b.id=? AND p.status='completed' AND p.extracted_text IS NOT NULL", (book['id'],)).fetchone()[0]
@@ -108,9 +110,11 @@ def page_detail(request:Request,uid:str,page_number:int,q:str='',mode:str='exact
     result_pages=search_pages(q,mode,selected_book,10000,0,identifiers_only=True,collection_id=selected_collection) if q else []
     ids=[(r['book_uuid'],r['page_number']) for r in result_pages]; current=(uid,page_number); pos=ids.index(current) if current in ids else -1
     prev_result=ids[pos-1] if pos>0 else None; next_result=ids[pos+1] if pos>=0 and pos+1<len(ids) else None
-    return templates.TemplateResponse(request=request,name="page_detail.html",context={"book":book,"page":page,"q":q,"mode":mode,"book_id":book_id or 'all',"highlighted":highlight_text(page['extracted_text'],q,mode) if page and q else (page['extracted_text'] if page else ''),"matches":count_matches(page['extracted_text'],q,mode) if page and q else 0,"settings":settings,"word_ready":bool(word_ready),"prev_result":prev_result,"next_result":next_result,"next_href":f'/books/{next_result[0]}/pages/{next_result[1]}' if next_result else '#'})
+    search_context = urlencode({'q': q, 'mode': mode, 'book_id': book_id or 'all'}) if q else ''
+    return templates.TemplateResponse(request=request,name="page_detail.html",context={"book":book,"page":page,"collection":collection,"q":q,"mode":mode,"book_id":book_id or 'all',"search_context":search_context,"highlighted":highlight_text(page['extracted_text'],q,mode) if page and q else (page['extracted_text'] if page else ''),"matches":count_matches(page['extracted_text'],q,mode) if page and q else 0,"settings":settings,"word_ready":bool(word_ready),"prev_result":prev_result,"next_result":next_result,"next_href":f'/books/{next_result[0]}/pages/{next_result[1]}' if next_result else '#'})
 @router.get('/books/{uid}/reader')
-def reader(request:Request,uid:str,page:int=1): return page_detail(request,uid,page)
+def reader(request:Request,uid:str,page:int=1,q:str='',mode:str='exact',book_id:str|None=None):
+    return page_detail(request,uid,page,q,mode,book_id)
 @router.get('/books/{uid}/export/json')
 def export_json(uid:str):
     ensure_complete(uid)
