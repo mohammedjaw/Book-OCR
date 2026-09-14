@@ -1,1 +1,12 @@
-{% extends 'base.html' %}{% block content %}<h1>الكتب</h1><a class="button" href="/books/new">رفع كتاب جديد</a><div class="list">{% for b in books %}<div class="card"><h2><a href="/books/{{b.book_uuid}}">{{b.title}}</a></h2><p>{{b.original_filename}}</p><span>{{b.page_count}} صفحة · {{b.status}}</span></div>{% else %}<p>لا توجد كتب.</p>{% endfor %}</div>{% endblock %}
+{% extends 'base.html' %}{% block content %}
+<h1>{{tr('books')}}</h1>
+<a class="button" href="/books/new">{{tr('upload')}}</a>
+<details class="card collection-create"><summary>{{tr('create_collection')}}</summary>
+<form method="post" action="/collections"><label>{{tr('collection_title')}}<input name="title" required maxlength="500"></label><button>{{tr('create_collection')}}</button></form></details>
+<div class="library-list">
+{% for c in collections %}<article class="card library-item" data-collection="{{c.uuid}}">
+<div class="library-info"><span>{{tr('collection')}}</span><h2><a dir="auto" href="/collections/{{c.uuid}}">{{c.title}}</a></h2><p>{{tr('volumes')}}: {{c.volume_count}} · {{tr('page_count')}}: {{c.page_count}}</p></div>
+<a class="button" href="/search?book_id=collection:{{c.id}}">{{tr('search')}}</a></article>{% endfor %}
+{% for b in books %}{% include '_library_book.html' %}{% endfor %}
+{% if not books and not collections %}<p>{{tr('empty_library')}}</p>{% endif %}
+</div>{% endblock %}

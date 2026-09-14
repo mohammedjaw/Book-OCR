@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request
 from ..database import connect
 from fastapi.templating import Jinja2Templates
-templates=Jinja2Templates(directory="templates"); router=APIRouter()
+from ..ui import templates; router=APIRouter()
 @router.get("/")
 def home(request: Request):
     with connect() as db:

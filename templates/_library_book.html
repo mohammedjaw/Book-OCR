@@ -1,0 +1,4 @@
+<article class="card library-item" data-book="{{b.book_uuid}}">
+<div class="library-info"><h2><a dir="auto" href="/books/{{b.book_uuid}}">{{b.title}}</a></h2><p dir="auto">{{b.original_filename}}</p><p>{{tr('page_count')}}: {{b.page_count}} · {{tr('status')}}: {{tr(b.status)}}</p></div>
+<div class="actions"><a class="button" href="/books/{{b.book_uuid}}">{{tr('open_book')}}</a><a class="button" href="/books/{{b.book_uuid}}/pages">{{tr('pages')}}</a></div>
+</article>

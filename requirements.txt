@@ -6,3 +6,4 @@ pymupdf
 google-genai
 python-docx
 markupsafe
+tzdata

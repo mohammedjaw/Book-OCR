@@ -1,119 +1,126 @@
-import sqlite3
-import pymupdf
-from google import genai
-from google.genai import types
-from app.secrets import load_secrets
+"""Manual generation smoke test; never executed during test collection."""
 
-# =========================
-# Read existing book from DB
-# =========================
+def main():
+    import sqlite3
+    import pymupdf
+    from google import genai
+    from google.genai import types
+    from app.secrets import load_secrets
 
-db = sqlite3.connect(r"data\library.db")
-db.row_factory = sqlite3.Row
+    # =========================
+    # Read existing book from DB
+    # =========================
 
-book = db.execute("""
-    SELECT *
-    FROM books
-    ORDER BY id DESC
-    LIMIT 1
-""").fetchone()
+    db = sqlite3.connect(r"data\library.db")
+    db.row_factory = sqlite3.Row
 
-db.close()
+    book = db.execute("""
+        SELECT *
+        FROM books
+        ORDER BY id DESC
+        LIMIT 1
+    """).fetchone()
 
-if not book:
-    raise RuntimeError("No book found in the database.")
+    db.close()
 
-PDF_PATH = book["file_path"]
+    if not book:
+        raise RuntimeError("No book found in the database.")
 
-print("PDF:", PDF_PATH)
-print("Pages:", book["page_count"])
+    PDF_PATH = book["file_path"]
 
-# =========================
-# Read Gemini API key
-# =========================
+    print("PDF:", PDF_PATH)
+    print("Pages:", book["page_count"])
 
-API_KEY = load_secrets().get("gemini_api_key")
+    # =========================
+    # Read Gemini API key
+    # =========================
 
-if not API_KEY:
-    raise RuntimeError("Gemini API key is not configured.")
+    API_KEY = load_secrets().get("gemini_api_key")
 
-MODEL = "gemini-3.1-flash-lite"
+    if not API_KEY:
+        raise RuntimeError("Gemini API key is not configured.")
 
-PROMPT = """
-أنت نظام متخصص في النسخ الحرفي الدقيق للكتب العربية المصورة.
+    MODEL = "gemini-3.1-flash-lite"
 
-المطلوب استخراج النص من الصفحة المرفقة فقط.
+    PROMPT = """
+    أنت نظام متخصص في النسخ الحرفي الدقيق للكتب العربية المصورة.
 
-التزم بما يلي:
+    المطلوب استخراج النص من الصفحة المرفقة فقط.
 
-- انسخ النص كما يظهر في الصفحة دون تلخيص أو شرح أو إعادة صياغة.
-- لا تصحح الأخطاء الإملائية أو النحوية أو الطباعية الموجودة في الأصل.
-- حافظ على الرسم الإملائي القديم كما هو.
-- حافظ على الآيات والأحاديث والأسماء والأرقام والرموز والحواشي كما تظهر.
-- حافظ على تقسيم الأسطر كما يظهر في الصفحة الأصلية قدر الإمكان.
-- كل سطر في الصفحة يجب أن يقابله سطر في النص المستخرج قدر الإمكان.
-- لا تدمج سطرين منفصلين في سطر واحد.
-- لا تقسّم سطرًا واحدًا إلى عدة أسطر إلا إذا كان ذلك موجودًا في الأصل.
-- لا تضف أسطرًا فارغة غير موجودة في الصفحة.
-- تجاهل فقط رأس الصفحة المتكرر ورقم الصفحة المطبوع إن كان منفصلًا عن المتن.
-- إذا كانت كلمة أو عبارة غير مقروءة فاكتب [غير واضح] بدل التخمين.
-- لا تستخدم Markdown.
-- لا تضف مقدمة أو خاتمة أو تعليقات.
-- أعد النص المستخرج فقط.
-"""
+    التزم بما يلي:
 
-# =========================
-# Render PAGE 1 to PNG
-# =========================
+    - انسخ النص كما يظهر في الصفحة دون تلخيص أو شرح أو إعادة صياغة.
+    - لا تصحح الأخطاء الإملائية أو النحوية أو الطباعية الموجودة في الأصل.
+    - حافظ على الرسم الإملائي القديم كما هو.
+    - حافظ على الآيات والأحاديث والأسماء والأرقام والرموز والحواشي كما تظهر.
+    - حافظ على تقسيم الأسطر كما يظهر في الصفحة الأصلية قدر الإمكان.
+    - كل سطر في الصفحة يجب أن يقابله سطر في النص المستخرج قدر الإمكان.
+    - لا تدمج سطرين منفصلين في سطر واحد.
+    - لا تقسّم سطرًا واحدًا إلى عدة أسطر إلا إذا كان ذلك موجودًا في الأصل.
+    - لا تضف أسطرًا فارغة غير موجودة في الصفحة.
+    - تجاهل فقط رأس الصفحة المتكرر ورقم الصفحة المطبوع إن كان منفصلًا عن المتن.
+    - إذا كانت كلمة أو عبارة غير مقروءة فاكتب [غير واضح] بدل التخمين.
+    - لا تستخدم Markdown.
+    - لا تضف مقدمة أو خاتمة أو تعليقات.
+    - أعد النص المستخرج فقط.
+    """
 
-with pymupdf.open(PDF_PATH) as pdf:
-    page = pdf[0]
+    # =========================
+    # Render PAGE 1 to PNG
+    # =========================
 
-    pixmap = page.get_pixmap(
-        matrix=pymupdf.Matrix(2.5, 2.5),
-        alpha=False
-    )
+    with pymupdf.open(PDF_PATH) as pdf:
+        page = pdf[0]
 
-    image = pixmap.tobytes("png")
+        pixmap = page.get_pixmap(
+            matrix=pymupdf.Matrix(2.5, 2.5),
+            alpha=False
+        )
 
-print("Page 1 rendered successfully.")
-print("Image size:", len(image), "bytes")
-print("Sending page 1 to Gemini...")
+        image = pixmap.tobytes("png")
 
-# =========================
-# Gemini
-# =========================
+    print("Page 1 rendered successfully.")
+    print("Image size:", len(image), "bytes")
+    print("Sending page 1 to Gemini...")
 
-client = genai.Client(api_key=API_KEY)
+    # =========================
+    # Gemini
+    # =========================
 
-try:
-    response = client.models.generate_content(
-        model=MODEL,
-        contents=[
-            types.Part.from_bytes(
-                data=image,
-                mime_type="image/png"
-            )
-        ],
-        config=types.GenerateContentConfig(
-            system_instruction=PROMPT,
-            thinking_config=types.ThinkingConfig(
-                thinking_level="high"
+    client = genai.Client(api_key=API_KEY)
+
+    try:
+        response = client.models.generate_content(
+            model=MODEL,
+            contents=[
+                types.Part.from_bytes(
+                    data=image,
+                    mime_type="image/png"
+                )
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=PROMPT,
+                thinking_config=types.ThinkingConfig(
+                    thinking_level="high"
+                )
             )
         )
-    )
 
-    print()
-    print("========== GEMINI RESULT ==========")
-    print()
-    print(response.text)
-    print()
-    print("===================================")
+        print()
+        print("========== GEMINI RESULT ==========")
+        print()
+        print(response.text)
+        print()
+        print("===================================")
 
-except Exception as e:
-    print()
-    print("========== GEMINI ERROR ==========")
-    print(type(e).__name__)
-    print(str(e))
-    print("==================================")
-    raise
+    except Exception as e:
+        print()
+        print("========== GEMINI ERROR ==========")
+        print(type(e).__name__)
+        from app.ocr_service import classify_gemini_error
+        print(classify_gemini_error(e))
+        print("==================================")
+        raise RuntimeError("Manual Gemini test failed") from None
+
+if __name__ == "__main__":
+    main()

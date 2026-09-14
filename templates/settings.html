@@ -1,1 +1,65 @@
-{% extends 'base.html' %}{% block content %}<h1>الإعدادات</h1>{% if message %}<div class="success">{{message}}</div>{% endif %}<form method="post"><label>المظهر<select id="theme" name="theme"><option>فاتح</option><option>داكن</option><option>تلقائي</option></select></label><label>Gemini API Key{% if settings.has_api_key %}<small>مفتاح API محفوظ</small>{% endif %}<input type="password" name="api_key" value=""></label><label>النموذج<input name="model" value="{{settings.gemini_model}}"></label><label>خط النص<input name="font_family" value="{{settings.font_family or 'Noto Naskh Arabic'}}"></label><label>حجم النص<input type="number" name="font_size" value="{{settings.font_size or 22}}"></label><label>تباعد الأسطر<input name="line_height" value="{{settings.line_height or 1.8}}"></label><button>حفظ الإعدادات</button></form><form method="post" action="/settings/test"><button>اختبار اتصال Gemini</button></form><script>let t=localStorage.theme||'تلقائي';theme.value=t;theme.onchange=()=>{localStorage.theme=theme.value;document.documentElement.dataset.theme=theme.value}</script>{% endblock %}
+{% extends 'base.html' %}
+{% block content %}
+<h1>{{tr('settings')}}</h1>
+{% if request.query_params.get('saved') %}<div class="success">{{tr('saved')}}</div>{% endif %}
+{% if message %}<div class="success">{{ message }}</div>{% endif %}
+{% if key_error == 'limit' %}<div class="error">{{ tr('key_limit_reached') }}</div>{% endif %}
+{% if test_result %}<div class="notice" role="alert">{{ test_result|safe }}</div>{% endif %}
+<h2>{{tr('api_keys')}}</h2>
+<form class="settings-form key-add-form" method="post" action="/settings/keys/add"><input name="name" placeholder="{{tr('key_name')}}"><input name="new_api_key" type="password" placeholder="مفتاح API"><button>{{tr('add_key')}}</button></form>
+<form class="settings-form" method="post">
+  <label>{{tr('active_key')}}<select name="active_key_id">{% for key in settings.gemini_keys %}<option value="{{ key.id }}" {% if key.is_active %}selected{% endif %}>{{ key.name }} — {{ key.masked_key }}</option>{% endfor %}</select></label>
+  <label>{{tr('key_mode')}}<select name="ocr_key_mode"><option value="single" {% if settings.ocr_key_mode != 'pool' %}selected{% endif %}>{{tr('single')}}</option><option value="pool" {% if settings.ocr_key_mode == 'pool' %}selected{% endif %}>{{tr('pool')}}</option></select></label>
+  <fieldset><legend>{{tr('pool')}}</legend><input type="hidden" name="pool_present" value="1">{% for key in settings.gemini_keys %}<label class="checkbox"><input type="checkbox" name="pool_ids" value="{{key.id}}" {% if key.id in settings.pool_ids %}checked{% endif %}>{{key.name}} — {{key.masked_key}}</label>{% endfor %}</fieldset>
+  <p>{{tr('local_counters')}}</p>
+  <p>{{tr('active_key')}}: {{ (settings.gemini_keys|selectattr('is_active')|map(attribute='name')|first) or 'لا يوجد' }}</p>
+  {% for key in settings.gemini_keys %}<div class="key-summary"><strong>{{ key.name }}</strong> — {{ key.masked_key }}<br>{{tr('requests')}}: {{ key.requests }} · {{tr('successes')}}: {{ key.successes }} · {{tr('failures')}}: {{ key.failures }}<br>{{tr('status')}}: {{ tr(key.last_status or 'available') }}</div>{% endfor %}
+  <label>{{tr('language')}}
+    <select name="ui_language" id="ui-language">
+      <option value="ar" {% if settings.ui_language == 'ar' %}selected{% endif %}>العربية</option>
+      <option value="en" {% if settings.ui_language == 'en' %}selected{% endif %}>English</option>
+      <option value="fa" {% if settings.ui_language == 'fa' %}selected{% endif %}>فارسی</option>
+    </select>
+  </label>
+  <label>{{tr('theme')}}
+    <select name="theme" id="site-theme">
+      {% if settings.ui_language == 'en' %}
+      <option value="فاتح" {% if settings.theme == 'فاتح' %}selected{% endif %}>Light</option>
+      <option value="داكن" {% if settings.theme == 'داكن' %}selected{% endif %}>Dark</option>
+      <option value="تلقائي" {% if settings.theme == 'تلقائي' %}selected{% endif %}>System</option>
+      {% elif settings.ui_language == 'fa' %}
+      <option value="فاتح" {% if settings.theme == 'فاتح' %}selected{% endif %}>روشن</option>
+      <option value="داكن" {% if settings.theme == 'داكن' %}selected{% endif %}>تیره</option>
+      <option value="تلقائي" {% if settings.theme == 'تلقائي' %}selected{% endif %}>خودکار</option>
+      {% else %}
+      <option value="فاتح" {% if settings.theme == 'فاتح' %}selected{% endif %}>فاتح</option>
+      <option value="داكن" {% if settings.theme == 'داكن' %}selected{% endif %}>داكن</option>
+      <option value="تلقائي" {% if settings.theme == 'تلقائي' %}selected{% endif %}>تلقائي</option>
+      {% endif %}
+    </select>
+  </label>
+  <label>{{tr('font')}}<input name="font_family" value="{{ settings.font_family or 'Noto Naskh Arabic' }}"></label>
+  <label>{{tr('font_size')}}<input type="number" name="font_size" value="{{ settings.font_size or 22 }}"></label>
+  <label>{{tr('line_height')}}<input name="line_height" value="{{ settings.line_height or 1.8 }}"></label>
+  <label>{{tr('model')}}<input name="model" value="{{ settings.gemini_model }}"></label>
+  <label>{{tr('thinking')}}<select name="thinking">{% for x in ['minimal','low','medium','high'] %}<option value="{{ x }}" {% if settings.thinking_level == x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></label>
+  <label>{{tr('concurrency')}}<select name="concurrency">{% for x in range(1,6) %}<option value="{{ x }}" {% if settings.max_concurrent_pages|string == x|string %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></label>
+  <input type="hidden" name="api_key" value="">
+  <button>{{tr('save')}}</button>
+</form>
+<form method="post" action="/settings/test"><button>{{tr('test_connection')}}</button></form>
+<script>
+  const language = document.getElementById('ui-language');
+  const theme = document.getElementById('site-theme');
+  function applySettingsUi() {
+
+
+    document.documentElement.lang = language.value;
+    document.documentElement.dir = language.value === 'en' ? 'ltr' : 'rtl';
+    document.documentElement.dataset.theme = theme.value;
+  }
+  language.addEventListener('change', applySettingsUi);
+  theme.addEventListener('change', applySettingsUi);
+  applySettingsUi();
+</script>
+{% endblock %}

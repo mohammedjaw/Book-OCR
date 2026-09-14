@@ -1,0 +1,7 @@
+{% extends 'base.html' %}{% block content %}
+<h1>{{tr('full_text')}} — {{book.title}}</h1>
+<nav class="pagination">{% if start_page>1 %}<a href="?page={{[1,start_page-20]|max}}">{{tr('previous')}}</a>{% endif %}<span>{{start_page}}–{{end_page}} / {{book.page_count}}</span>{% if end_page<book.page_count %}<a href="?page={{end_page+1}}">{{tr('next')}}</a>{% endif %}</nav>
+<div class="full-book ocr-text" style="--reader-font:'{{prefs.font_family or 'Noto Naskh Arabic'}}';--reader-size:{{prefs.font_size or 22}}px;--reader-line:{{prefs.line_height or 1.8}}">
+{% for page in pages %}<section class="card"><h2><a href="/books/{{book.book_uuid}}/pages/{{page.page_number}}">{{tr('page')}} {{page.page_number}}</a> · <a href="/books/{{book.book_uuid}}/view?page={{page.page_number}}">PDF</a></h2>{% if page.status!='completed' %}<p>{{tr(page.status)}}</p>{% endif %}<pre dir="auto">{{page.extracted_text or ''}}</pre></section>{% endfor %}
+</div>{% if end_page<book.page_count %}<a class="button" href="?page={{end_page+1}}">{{tr('next')}}</a>{% endif %}
+{% endblock %}

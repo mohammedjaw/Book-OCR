@@ -1,0 +1,15 @@
+{% extends 'base.html' %}{% block content %}
+<a href="/books">{{tr('books')}}</a><h1 dir="auto">{{collection.title}}</h1>
+<p>{{tr('volumes')}}: {{books|length}} · {{tr('page_count')}}: {{books|sum(attribute='page_count')}}</p>
+<a class="button" href="/search?book_id=collection:{{collection.id}}">{{tr('search')}}</a>
+{% if error %}<p class="error" role="alert">{{tr(error)}}</p>{% endif %}
+<details class="card"><summary>{{tr('rename_collection')}}</summary><form method="post" action="/collections/{{collection.uuid}}/rename"><label>{{tr('collection_title')}}<input name="title" value="{{collection.title}}" maxlength="500" required></label><button>{{tr('rename_collection')}}</button></form></details>
+{% if available %}<form method="post" action="/collections/{{collection.uuid}}/add" class="collection-add"><label>{{tr('add_volume')}}<select name="book_uid" required>{% for b in available %}<option value="{{b.book_uuid}}">{{b.title}}</option>{% endfor %}</select></label><label>{{tr('volume_number')}}<input name="volume_number" type="number" min="1" max="2147483647"></label><button>{{tr('add_volume')}}</button></form>{% endif %}
+<p>{{tr('volume_help')}}</p>
+<div class="library-list">
+{% for b in books %}<article class="card" data-book="{{b.book_uuid}}">
+<div class="library-item"><div class="library-info"><h2><a dir="auto" href="/books/{{b.book_uuid}}">{{b.title}}</a></h2><p>{{tr('volume_number')}}: {{b.volume_number if b.volume_number is not none else '—'}} · {{tr('page_count')}}: {{b.page_count}} · {{tr('status')}}: {{tr(b.status)}}</p><p dir="auto">{{b.original_filename}}</p></div><a class="button" href="/books/{{b.book_uuid}}">{{tr('open_book')}}</a></div>
+<div class="actions"><form method="post" action="/books/{{b.book_uuid}}/collection"><input type="hidden" name="collection_id" value="{{collection.uuid}}"><label>{{tr('volume_number')}}<input name="volume_number" type="number" min="1" max="2147483647" value="{{b.volume_number if b.volume_number is not none else ''}}"></label><button>{{tr('save_order')}}</button></form><form method="post" action="/books/{{b.book_uuid}}/collection"><button>{{tr('remove_volume')}}</button></form></div>
+</article>{% else %}<p>{{tr('empty_collection')}}</p>{% endfor %}</div>
+<form method="post" action="/collections/{{collection.uuid}}/delete" class="collection-delete"><button class="danger" {% if books %}disabled{% endif %}>{{tr('delete_collection')}}</button>{% if books %}<p>{{tr('collection_not_empty')}}</p>{% endif %}</form>
+{% endblock %}

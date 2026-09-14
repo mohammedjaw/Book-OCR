@@ -1,1 +1,22 @@
-{% extends 'base.html' %}{% block content %}{% if book %}<h1>{{book.title}}</h1><div class="card"><h2>التصدير والتنزيل</h2><a class="button" href="/books/{{book.book_uuid}}/download/pdf">تنزيل PDF الأصلي</a><a class="button" href="/books/{{book.book_uuid}}/export/docx">تصدير Word</a><a class="button" href="/books/{{book.book_uuid}}/export/json">تصدير JSON</a><a class="button" href="/books/{{book.book_uuid}}/export/package">تصدير الحزمة الكاملة</a><small>يتضمن PDF الأصلي والنصوص المستخرجة وحالة جميع الصفحات.</small></div><div class="card"><p>الصفحات: {{book.page_count}} · مكتمل: <span id="completed">{{counts.completed or 0}}</span> · جارٍ: <span id="processing">{{counts.processing or 0}}</span> · انتظار: <span id="pending">{{counts.pending or 0}}</span> · فشل: <span id="failed">{{counts.failed or 0}}</span></p><progress id="progress" value="{{counts.completed or 0}}" max="{{book.page_count}}"></progress><p>تم استخراج {{counts.completed or 0}} من {{book.page_count}} صفحة</p></div>{% endif %}{% endblock %}
+{% extends 'base.html' %}{% block content %}
+<h1>{{book.title}}</h1>
+<details class="card"><summary>{{tr('collection')}}{% for c in collections if c.id == book.collection_id %}: <a href="/collections/{{c.uuid}}">{{c.title}}</a>{% endfor %}</summary>
+<form method="post" action="/books/{{book.book_uuid}}/collection"><label>{{tr('collection')}}<select name="collection_id"><option value="">{{tr('standalone')}}</option>{% for c in collections %}<option value="{{c.uuid}}" {% if c.id==book.collection_id %}selected{% endif %}>{{c.title}}</option>{% endfor %}</select></label><label>{{tr('volume_number')}}<input type="number" name="volume_number" min="1" max="2147483647" value="{{book.volume_number if book.volume_number is not none else ''}}"></label><button>{{tr('assign_collection')}}</button></form><a href="/books">{{tr('create_collection')}}</a></details>
+{% if error %}<p class="error">{{error}}</p>{% endif %}
+<div class="card" id="ocr-status" data-url="/books/{{book.book_uuid}}/ocr/status">
+<p>{% for key in ['completed','processing','pending','failed'] %}{{tr(key)}}: <span id="{{key}}">{{counts[key] or 0}}</span> {% endfor %}</p>
+<progress id="progress" value="{{counts.completed or 0}}" max="{{book.page_count}}"></progress>
+<p id="progress-text">{{counts.completed or 0}} / {{book.page_count}}</p><p id="worker-text" role="status"></p><p id="poll-error" role="status"></p>
+<div class="actions">
+<form id="start-form" method="post" action="/books/{{book.book_uuid}}/ocr/start"><button {% if active or not counts.pending %}disabled{% endif %}>{{tr('start')}}</button></form>
+<form id="pause-form" method="post" action="/books/{{book.book_uuid}}/ocr/pause"><button {% if not active %}disabled{% endif %}>{{tr('pause')}}</button></form>
+<form id="retry-form" method="post" action="/books/{{book.book_uuid}}/ocr/retry"><button {% if active or not counts.failed %}disabled{% endif %}>{{tr('retry')}}</button></form>
+</div>
+<a class="button" href="/books/{{book.book_uuid}}/pages">{{tr('pages')}}</a><a class="button" href="/books/{{book.book_uuid}}/text">{{tr('full_text')}}</a>
+<form method="post" action="/books/{{book.book_uuid}}/ocr" class="single-page-form"><label>{{tr('page')}}<input name="page_number" type="number" min="1" max="{{book.page_count}}" value="1" required></label><button>{{tr('start')}}</button></form>
+</div>
+<div class="card"><a class="button" href="/books/{{book.book_uuid}}/download/pdf">{{tr('original_pdf')}}</a>
+<div id="exports" {% if counts.completed != book.page_count %}hidden{% endif %}>{% for ext,label in [('docx','Word'),('json','JSON'),('package','Book-OCR ZIP')] %}<a class="button" href="/books/{{book.book_uuid}}/export/{{ext}}">{{label}}</a>{% endfor %}</div></div>
+<a class="button danger" href="/books/{{book.book_uuid}}/delete">{{tr('delete')}}</a>
+<script id="status-labels" type="application/json">{{labels|tojson}}</script><script src="/static/js/book-status.js" defer></script>
+{% endblock %}
