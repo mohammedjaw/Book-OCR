@@ -4,8 +4,8 @@
 <details class="card collection-create"><summary>{{tr('create_collection')}}</summary>
 <form method="post" action="/collections"><label>{{tr('collection_title')}}<input name="title" required maxlength="500"></label><button>{{tr('create_collection')}}</button></form></details>
 <div class="library-list">
-{% for c in collections %}<article class="card library-item" data-collection="{{c.uuid}}">
-<div class="library-info"><span>{{tr('collection')}}</span><h2><a dir="auto" href="/collections/{{c.uuid}}">{{c.title}}</a></h2><p>{{tr('volumes')}}: {{c.volume_count}} · {{tr('page_count')}}: {{c.page_count}}</p></div>
+{% for c in collections %}<article class="card library-item collection-item" data-collection="{{c.uuid}}">
+<div class="library-info"><span class="item-kind">{{tr('collection')}}</span><h2><a dir="auto" href="/collections/{{c.uuid}}">{{c.title}}</a></h2><p class="secondary">{{tr('volumes')}}: {{c.volume_count}} · {{tr('page_count')}}: {{c.page_count}}</p></div>
 <a class="button" href="/search?book_id=collection:{{c.id}}">{{tr('search')}}</a></article>{% endfor %}
 {% for b in books %}{% include '_library_book.html' %}{% endfor %}
 {% if not books and not collections %}<p>{{tr('empty_library')}}</p>{% endif %}

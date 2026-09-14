@@ -5,7 +5,7 @@
 {% if message %}<div class="success">{{ message }}</div>{% endif %}
 {% if key_error == 'limit' %}<div class="error">{{ tr('key_limit_reached') }}</div>{% endif %}
 {% if test_result %}<div class="notice" role="alert">{{ test_result|safe }}</div>{% endif %}
-<h2>{{tr('api_keys')}}</h2>
+<section class="settings-section"><h2>{{tr('api_keys')}}</h2>
 <form class="settings-form key-add-form" method="post" action="/settings/keys/add"><input name="name" placeholder="{{tr('key_name')}}"><input name="new_api_key" type="password" placeholder="مفتاح API"><button>{{tr('add_key')}}</button></form>
 <form class="settings-form" method="post">
   <label>{{tr('active_key')}}<select name="active_key_id">{% for key in settings.gemini_keys %}<option value="{{ key.id }}" {% if key.is_active %}selected{% endif %}>{{ key.name }} — {{ key.masked_key }}</option>{% endfor %}</select></label>
@@ -46,8 +46,8 @@
   <label>{{tr('concurrency')}}<select name="concurrency">{% for x in range(1,6) %}<option value="{{ x }}" {% if settings.max_concurrent_pages|string == x|string %}selected{% endif %}>{{ x }}</option>{% endfor %}</select></label>
   <input type="hidden" name="api_key" value="">
   <button>{{tr('save')}}</button>
-</form>
-<form method="post" action="/settings/test"><button>{{tr('test_connection')}}</button></form>
+</form></section>
+<section class="settings-section settings-test"><h2>Gemini</h2><form method="post" action="/settings/test"><button class="secondary-button">{{tr('test_connection')}}</button></form></section>
 <script>
   const language = document.getElementById('ui-language');
   const theme = document.getElementById('site-theme');

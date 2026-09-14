@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Book-OCR">
+  <rect width="64" height="64" rx="14" fill="#177245"/>
+  <path d="M14 15c8-3 16-1 18 4v30c-4-4-11-5-18-2V15Zm36 0c-8-3-16-1-18 4v30c4-4 11-5 18-2V15Z" fill="#f7fbf8"/>
+  <path d="M21 24h7m-7 7h7m8-7h7m-7 7h7" stroke="#177245" stroke-width="3" stroke-linecap="round"/>
+</svg>
