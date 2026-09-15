@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Request, Form
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Request, Form, HTTPException
+from fastapi.responses import RedirectResponse, Response
+from fastapi import UploadFile, File
 from fastapi.templating import Jinja2Templates
 
 from ..database import connect
@@ -7,10 +8,24 @@ from ..secrets import load_secrets, save_secrets
 from ..ocr_service import classify_gemini_error
 from markupsafe import Markup, escape
 from ..gemini_key_manager import list_keys, get_active_key, set_active_key, MAX_GEMINI_API_KEYS
+from ..key_backup import export_backup, restore_backup
 
 
 from ..ui import templates
 router = APIRouter()
+
+@router.post('/settings/keys/backup/export')
+def export_key_backup(password: str = Form(...), confirmation: str = Form(...)):
+    if password != confirmation: raise HTTPException(400, 'Passwords do not match.')
+    try: blob = export_backup(password)
+    except ValueError as exc: raise HTTPException(400, str(exc)) from None
+    return Response(blob, media_type='application/octet-stream', headers={'Content-Disposition':'attachment; filename="book-ocr-keys.bookocr-keys"'})
+
+@router.post('/settings/keys/backup/import')
+async def import_key_backup(file: UploadFile = File(...), password: str = Form(...), mode: str = Form(...), replace_confirmation: str = Form('')):
+    try: restore_backup(await file.read(), password, mode, confirmed=replace_confirmation == 'REPLACE')
+    except ValueError as exc: raise HTTPException(400, str(exc)) from None
+    return RedirectResponse('/settings?saved=1', 303)
 
 @router.post('/settings/keys/add')
 def add_gemini_key(name: str = Form(''), new_api_key: str = Form('')):

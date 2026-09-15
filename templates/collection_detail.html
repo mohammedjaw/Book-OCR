@@ -2,6 +2,7 @@
 <a href="/books">{{tr('books')}}</a><h1 dir="auto">{{collection.title}}</h1>
 <p class="collection-summary">{{tr('collection')}} · {{tr('volumes')}}: {{books|length}} · {{tr('page_count')}}: {{books|sum(attribute='page_count')}}</p>
 <a class="button" href="/search?book_id=collection:{{collection.id}}">{{tr('search')}}</a>
+{% if books and not export_blockers %}<a class="button" href="/collections/{{collection.uuid}}/export/package">Export Collection</a>{% else %}<p class="secondary">Collection export is available only when every volume is complete.{% if export_blockers %} Blocking volumes: {{export_blockers|join(', ')}}{% endif %}</p>{% endif %}
 {% if error %}<p class="error" role="alert">{{tr(error)}}</p>{% endif %}
 <details class="card"><summary>{{tr('rename_collection')}}</summary><form method="post" action="/collections/{{collection.uuid}}/rename"><label>{{tr('collection_title')}}<input name="title" value="{{collection.title}}" maxlength="500" required></label><button>{{tr('rename_collection')}}</button></form></details>
 {% if available %}<form method="post" action="/collections/{{collection.uuid}}/add" class="collection-add"><label>{{tr('add_volume')}}<select name="book_uid" required>{% for b in available %}<option value="{{b.book_uuid}}">{{b.title}}</option>{% endfor %}</select></label><label>{{tr('volume_number')}}<input name="volume_number" type="number" min="1" max="2147483647"></label><button>{{tr('add_volume')}}</button></form>{% endif %}

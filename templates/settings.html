@@ -48,6 +48,7 @@
   <button>{{tr('save')}}</button>
 </form></section>
 <section class="settings-section settings-test"><h2>Gemini</h2><form method="post" action="/settings/test"><button class="secondary-button">{{tr('test_connection')}}</button></form></section>
+<section class="settings-section"><h2>API Key Backup</h2><form method="post" action="/settings/keys/backup/export"><label>Password / passphrase<input name="password" type="password" minlength="12" required autocomplete="new-password"></label><label>Confirm password<input name="confirmation" type="password" minlength="12" required autocomplete="new-password"></label><button class="secondary-button">Export encrypted backup</button></form><form method="post" action="/settings/keys/backup/import" enctype="multipart/form-data"><label>Encrypted backup<input name="file" type="file" accept=".bookocr-keys" required></label><label>Password / passphrase<input name="password" type="password" required autocomplete="current-password"></label><label>Import mode<select name="mode"><option value="merge">Merge</option><option value="replace">Replace</option></select></label><label>For Replace, type REPLACE<input name="replace_confirmation" autocomplete="off"></label><button class="secondary-button">Import encrypted backup</button></form></section>
 <script>
   const language = document.getElementById('ui-language');
   const theme = document.getElementById('site-theme');

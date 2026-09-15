@@ -1,0 +1,24 @@
+Book-OCR for Windows
+====================
+
+Extract the complete downloaded folder. Keep Book-OCR.exe and the _internal
+folder together; do not copy or move the executable by itself.
+
+1. Double-click Book-OCR.exe. Your default browser opens automatically at
+   http://book-ocr.localhost:8765. If an older browser cannot open that name,
+   use http://localhost:8765 instead.
+2. In Settings, add your Gemini API key if you want to run OCR.
+3. Upload PDFs or import Book-OCR packages from the Books page.
+
+Your library is kept outside this application folder at:
+  %LOCALAPPDATA%\Book-OCR\
+
+To back up your library, close Book-OCR and copy that folder. It contains the
+SQLite database, original PDFs, exports, and configuration. Treat
+config\secrets.json as sensitive if you choose to back it up.
+
+Book browsing, existing OCR text, search, PDF viewing, and local exports work
+locally. Gemini OCR and connection testing require Internet access; OCR sends
+the rendered page content needed for the request to the configured Gemini API.
+
+Do not copy old data into the application folder; updates replace that folder.

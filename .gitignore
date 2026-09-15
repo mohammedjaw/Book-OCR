@@ -5,7 +5,18 @@ venv/
 .env
 .env.*
 !.env.example
+secrets.json
 config/secrets.json
+*.bookocr-keys
+*.bookocr.zip
+*.bookocr-collection.zip
+*.pdf
+Book-OCR-*-Windows-*.zip
+Book-OCR-*-Windows-*.zip.sha256
+*.pem
+*.key
+*.p12
+*.pfx
 *.pyc
 *.log
 *.db
@@ -27,6 +38,7 @@ temporary/
 temp/
 tmp/
 diagnostics/
+logs/
 cache/
 sessions/
 .idea/
@@ -37,5 +49,7 @@ dist/
 build/
 *.tmp
 *.cache
+.DS_Store
+Thumbs.db
 config/*
 !config/.gitkeep

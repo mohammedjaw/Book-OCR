@@ -1,5 +1,7 @@
 # Book-OCR stabilization report
 
+> Historical engineering record for the September 14, 2026 stabilization pass. For current 0.2.3 installation, testing, security, and release information, see `README.md` and `SECURITY.md`.
+
 Completed September 14, 2026. This pass preserves the existing application and its pre-existing uncommitted work. Verification used disposable databases, PDFs, and synthetic secrets. The real library and saved keys were not opened for modification or used for OCR.
 
 1. **Root causes found.** Live polling referenced undefined `progressText`/`workerText` variables and stopped after errors. Retry-failed indexed a one-element tuple as if it had two elements. Start included failed pages automatically. Generic `RESOURCE_EXHAUSTED` was treated as daily quota; key failures became failed pages. The worker used cumulative quota failures to stop an entire job. The key pool was missing, counters incremented twice, and secret updates could race. Recovery ran during Start and ignored recently interrupted pages. SQLite connections were not explicitly closed. Settings had two conflicting persistence sources. Package import trusted UUID-derived paths, did not verify actual PDF page count, and indexed outside the import transaction. Delete raced active OCR and unlinked an unrestricted path. Reader jump navigation used the wrong parameter. Windows export temporary files remained open.

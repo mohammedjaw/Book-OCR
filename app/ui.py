@@ -1,4 +1,5 @@
 from fastapi.templating import Jinja2Templates
+from .paths import ASSET_ROOT
 from .database import connect
 
 LABELS = {
@@ -65,4 +66,4 @@ def preferences(request):
     def tr(key): return LABELS.get(key,(key,key,key))[index]
     return {'prefs':prefs,'lang':lang,'tr':tr,'labels':{key:values[index] for key,values in LABELS.items()}}
 
-templates = Jinja2Templates(directory='templates', context_processors=[preferences])
+templates = Jinja2Templates(directory=ASSET_ROOT / 'templates', context_processors=[preferences])

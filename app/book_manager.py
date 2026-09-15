@@ -3,8 +3,9 @@ from datetime import datetime
 from pathlib import Path
 import pymupdf
 from .database import connect
+from .paths import BOOKS_ROOT
 
-BOOKS = Path(__file__).parent.parent / "books"
+BOOKS = BOOKS_ROOT
 def safe_name(name):
     return re.sub(r"[^\w .-]", "_", Path(name).stem)[:100] + ".pdf"
 def add_book(upload, title=None):

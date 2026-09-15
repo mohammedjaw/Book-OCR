@@ -1,9 +1,9 @@
 import json
 import os
-from pathlib import Path
 from threading import RLock
+from .paths import CONFIG_ROOT
 
-SECRETS_FILE = Path(__file__).parent.parent / 'config' / 'secrets.json'
+SECRETS_FILE = CONFIG_ROOT / 'secrets.json'
 LOCK = RLock()
 
 def load_secrets():

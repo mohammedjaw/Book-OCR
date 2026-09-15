@@ -3,9 +3,12 @@ import sqlite3
 from datetime import datetime, timezone
 from uuid import uuid4
 from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
+from starlette.background import BackgroundTask
+import os
 from ..database import connect
 from ..ui import templates
+from ..package_service import export_collection_package
 
 router = APIRouter()
 
@@ -38,8 +41,22 @@ def render_detail(request, uid, error=None, status_code=200):
         collection = require_collection(db, uid)
         books = db.execute('SELECT * FROM books WHERE collection_id=? ORDER BY volume_number IS NULL,volume_number,id', (collection['id'],)).fetchall()
         available = db.execute('SELECT book_uuid,title FROM books WHERE collection_id IS NULL ORDER BY title,id').fetchall()
+    blockers = [book['title'] for book in books if not _book_complete(book)]
     return templates.TemplateResponse(request=request, name='collection_detail.html',
-        context={'collection': collection, 'books': books, 'available': available, 'error': error}, status_code=status_code)
+        context={'collection': collection, 'books': books, 'available': available, 'error': error, 'export_blockers': blockers}, status_code=status_code)
+
+def _book_complete(book):
+    with connect() as db:
+        row = db.execute("SELECT COUNT(*) total,COALESCE(SUM(status='completed'),0) completed FROM book_pages WHERE book_id=?", (book['id'],)).fetchone()
+    return row['total'] == book['page_count'] and row['completed'] == book['page_count']
+
+@router.get('/collections/{uid}/export/package')
+def export_collection(uid: str):
+    try:
+        path, name = export_collection_package(uid)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    return FileResponse(path, media_type='application/zip', filename=name, background=BackgroundTask(os.unlink, path))
 
 @router.post('/collections/{uid}/rename')
 def rename(uid: str, title: str = Form(...)):

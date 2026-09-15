@@ -1,8 +1,8 @@
 import sqlite3
-from pathlib import Path
 from .secrets import load_secrets, save_secrets
+from .paths import DATABASE_FILE
 
-DB = Path(__file__).parent.parent / "data" / "library.db"
+DB = DATABASE_FILE
 
 class Connection(sqlite3.Connection):
     def __exit__(self, *args):
