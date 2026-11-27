@@ -40,10 +40,11 @@ def render_detail(request, uid, error=None, status_code=200):
     with connect() as db:
         collection = require_collection(db, uid)
         books = db.execute('SELECT * FROM books WHERE collection_id=? ORDER BY volume_number IS NULL,volume_number,id', (collection['id'],)).fetchall()
+        text_ready = db.execute("SELECT EXISTS(SELECT 1 FROM book_pages p JOIN books b ON b.id=p.book_id WHERE b.collection_id=? AND p.status='completed' AND length(p.extracted_text)>0)",(collection['id'],)).fetchone()[0]
         available = db.execute('SELECT book_uuid,title FROM books WHERE collection_id IS NULL ORDER BY title,id').fetchall()
     blockers = [book['title'] for book in books if not _book_complete(book)]
     return templates.TemplateResponse(request=request, name='collection_detail.html',
-        context={'collection': collection, 'books': books, 'available': available, 'error': error, 'export_blockers': blockers}, status_code=status_code)
+        context={'collection': collection, 'books': books, 'available': available, 'error': error, 'text_ready':bool(text_ready), 'export_blockers': blockers}, status_code=status_code)
 
 def _book_complete(book):
     with connect() as db:
@@ -92,3 +93,10 @@ def assign(book_uid: str, collection_id: str = Form(''), volume_number: int | No
 @router.post('/collections/{uid}/add')
 def add(uid: str, book_uid: str = Form(...), volume_number: int | None = Form(None)):
     return assign(book_uid, uid, volume_number)
+
+
+@router.get('/collections/{uid}/export/{ext}')
+def export_text(uid: str, ext: str):
+    from ..export_service import make_text
+    path, name = make_text(uid, ext, collection=True)
+    return FileResponse(path, media_type='text/markdown; charset=utf-8' if ext == 'md' else 'text/plain; charset=utf-8', filename=name, background=BackgroundTask(os.unlink, path))

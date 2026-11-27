@@ -22,6 +22,7 @@
       el('retry-form').querySelector('button').disabled = data.active || !data.retryable_failed;
       root.querySelector('.single-page-form button').disabled = data.active || !counts.pending;
       el('exports').hidden = !data.complete;
+      if (el('text-exports')) el('text-exports').hidden = !data.text_ready;
       el('poll-error').textContent = ''; failures = 0;
       interval = data.active ? 3000 : 15000;
     } catch (_) {

@@ -84,6 +84,62 @@ class StabilizationTests(unittest.TestCase):
         with patch.object(ocr,'generate') as mock:
             worker.start(self.bid,retry_failed=True);self.wait();mock.assert_not_called()
 
+    def test_delete_active_key_requires_confirmation_and_cleans_selection(self):
+        client = self.client()
+        active, remaining = keys.list_keys()
+        ids = [active['id'], remaining['id']]
+        client.post('/settings', data={'pool_present': '1', 'pool_ids': ids})
+        store = secrets.load_secrets()
+        store['ocr_pool_ids'] = ids
+        store['gemini_api_key'] = keys.get_active_key()['api_key']
+        secrets.save_secrets(store)
+
+        path = f"/settings/keys/{active['id']}/delete"
+        settings_html = client.get('/settings').text
+        self.assertIn(f'action="{path}"', settings_html)
+        self.assertNotIn(store['gemini_api_key'], settings_html)
+        self.assertEqual(client.get(path).status_code, 405)
+        self.assertEqual(client.post(path).status_code, 400)
+        self.assertEqual(secrets.load_secrets(), store)
+
+        response = client.post(path, data={'confirmation': 'delete'}, follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(keys.get_active_key()['id'], remaining['id'])
+        self.assertEqual(ocr.current_key_selection(), ('pool', [remaining['id']]))
+        current = secrets.load_secrets()
+        self.assertEqual(current['gemini_api_keys'], [store['gemini_api_keys'][1]])
+        self.assertEqual(current['ocr_pool_ids'], [remaining['id']])
+        self.assertNotIn('gemini_api_key', current)
+        self.assertEqual(client.post(path, data={'confirmation': 'delete'}).status_code, 404)
+        client.post('/settings', data={'pool_present': '1', 'pool_ids': ids})
+        self.assertEqual(ocr.current_key_selection(), ('pool', [remaining['id']]))
+
+    def test_settings_with_older_backend_hides_unavailable_delete_action(self):
+        from app.routes import settings
+        context = settings.get_settings_context()
+        context.pop('can_delete_keys')
+        with patch.object(settings, 'get_settings_context', return_value=context):
+            html = self.client().get('/settings').text
+        self.assertIn('أعد تشغيل Book-OCR', html)
+        self.assertNotIn('/delete"', html)
+
+    def test_delete_inactive_then_last_key(self):
+        client = self.client()
+        active, inactive = keys.list_keys()
+        store = secrets.load_secrets()
+        store['gemini_api_key'] = keys.get_active_key()['api_key']
+        secrets.save_secrets(store)
+        for target in (inactive, active):
+            path = f"/settings/keys/{target['id']}/delete"
+            self.assertEqual(client.post(path, data={'confirmation': 'delete'}).status_code, 200)
+            if target == inactive:
+                self.assertEqual(keys.get_active_key()['id'], active['id'])
+        self.assertEqual(keys.list_keys(), [])
+        self.assertIsNone(keys.get_active_key())
+        self.assertEqual(ocr.current_key_selection(), ('single', []))
+        keys.add_key('Replacement', 'fake-replacement')
+        self.assertEqual(keys.get_active_key()['name'], 'Replacement')
+
     def test_settings_persistence_and_secrets(self):
         client=self.client()
         selected=keys.list_keys()[1]['id']
@@ -106,7 +162,7 @@ class StabilizationTests(unittest.TestCase):
             self.assertIn(f'lang="{lang}" dir="rtl"',client.get('/settings').text)
     def test_routes_reader_search_exports(self):
         client=self.client()
-        self.assertEqual(client.get(f'/books/{self.uid}/export/package').status_code,409)
+        self.assertEqual(client.get(f'/books/{self.uid}/export/package').status_code,200)
         self.complete()
         for path in ('','/pages','/reader?page=1','/view?page=8','/text','/file','/download/pdf','/pages?status=processing','/delete'):
             with self.subTest(path=path): self.assertEqual(client.get(f'/books/{self.uid}{path}').status_code,200)
@@ -231,11 +287,11 @@ class StabilizationTests(unittest.TestCase):
             worker.start(self.bid);self.wait();self.assertEqual(mock.call_count,8-completed)
     def test_transient_retry_and_exhaustion(self):
         from threading import Event
-        for error in (TimeoutError('timeout'),Exception('500'),Exception('503')):
+        for error in (TimeoutError('timeout'),Exception('500')):
             with self.subTest(error=error),patch.object(ocr,'generate',side_effect=[error,'retained']),patch.object(Event,'wait',return_value=False):
                 self.assertTrue(ocr.extract_page(self.bid,1))
             with database.connect() as db:db.execute("UPDATE book_pages SET status='pending' WHERE page_number=1")
-        with patch.object(ocr,'generate',side_effect=Exception('503')),patch.object(Event,'wait',return_value=False):
+        with patch.object(ocr,'generate',side_effect=Exception('500')),patch.object(Event,'wait',return_value=False):
             self.assertFalse(ocr.extract_page(self.bid,1))
         self.assertEqual(self.counts(),{'failed':1,'pending':7})
         with patch.object(ocr,'generate',return_value='retry'):

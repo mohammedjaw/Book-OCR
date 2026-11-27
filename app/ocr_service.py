@@ -1,12 +1,13 @@
 from datetime import datetime
 import json
 import random
+import re
 import threading
 import pymupdf
-from .database import connect
+from .database import connect, read_key_selection
 from .ocr_prompt import OCR_SYSTEM_INSTRUCTION
 from .search_service import normalize_arabic
-from .gemini_key_manager import acquire_key, record_request, KeysUnavailable, SchedulingPaused
+from .gemini_key_manager import acquire_key, defer_ocr_requests, record_request, KeysUnavailable, SchedulingPaused
 
 MAX_ATTEMPTS = 4
 _render_lock = threading.Lock()  # PyMuPDF does not support concurrent document operations.
@@ -14,19 +15,33 @@ _render_lock = threading.Lock()  # PyMuPDF does not support concurrent document 
 class PageFailure(Exception):
     pass
 
+class EmptyOCRResponse(RuntimeError):
+    pass
+
+def is_service_unavailable(exc):
+    response = getattr(exc, 'response', None)
+    status = (getattr(exc, 'code', None) or getattr(exc, 'status_code', None)
+              or getattr(response, 'status_code', None) or getattr(response, 'status', None))
+    if status is not None:
+        return str(status) == '503'
+    return bool(re.match(r'^(?:HTTP\s+)?503\b', str(exc).lstrip(), re.I))
+
 def classify_gemini_error(exc):
+    if isinstance(exc, EmptyOCRResponse) or is_service_unavailable(exc):
+        return 'service_error'
     text = (type(exc).__name__ + ' ' + str(exc) + ' ' + str(getattr(exc, 'code', ''))).upper()
     if any(x in text for x in ('REQUESTSPERDAY', 'REQUESTS_PER_DAY', 'PER DAY', 'DAILY QUOTA', 'TOKENS_PER_DAY', 'TOKENSPERDAY')):
         return 'quota_exhausted'
-    if any(x in text for x in ('401', '403', 'INVALID API KEY', 'API_KEY_INVALID', 'UNAUTHENTICATED', 'PERMISSION_DENIED')):
+    if any(x in text for x in ('401', 'INVALID API KEY', 'API KEY NOT VALID', 'API_KEY_INVALID', 'UNAUTHENTICATED')):
         return 'invalid_key'
+    if '403' in text or 'PERMISSION_DENIED' in text:
+        return 'permission_denied'
     if '429' in text or 'RESOURCE_EXHAUSTED' in text or 'RATE LIMIT' in text: return 'rate_limited'
     if isinstance(exc, (TimeoutError, ConnectionError)) or any(x in text for x in ('TIMEOUT', 'TIMED OUT', 'CONNECTION', 'NETWORK', 'TEMPORARY', 'CONNECTERROR', 'READERROR', 'WRITEERROR', 'PROTOCOLERROR')): return 'network_error'
     if any(x in text for x in ('500', '502', '503', '504')): return 'service_error'
     return 'permanent_request'
 
 def retry_delay(exc, attempt):
-    import re
     delay = min(60, 4 * 2 ** attempt) + random.uniform(0, 2)
     headers = getattr(getattr(exc, 'response', None), 'headers', {}) or {}
     hint = headers.get('retry-after', '')
@@ -63,7 +78,7 @@ def generate(key, image, model, thinking, mime_type='image/png'):
     from google.genai import types
     with genai.Client(api_key=key, http_options=types.HttpOptions(timeout=120000, retry_options=types.HttpRetryOptions(attempts=1))) as client:
         response = client.models.generate_content(model=model, contents=[types.Part.from_bytes(data=image, mime_type=mime_type)], config=types.GenerateContentConfig(system_instruction=OCR_SYSTEM_INSTRUCTION, thinking_config=types.ThinkingConfig(thinking_level=thinking)))
-        if response.text is None: raise RuntimeError('503 Empty OCR response')
+        if response.text is None: raise EmptyOCRResponse('Empty OCR response')
         return response.text
 
 def _state(book_id, page_number, status, kind=None, diagnostics=None):
@@ -72,6 +87,12 @@ def _state(book_id, page_number, status, kind=None, diagnostics=None):
         message += ' Diagnostic: ' + _diagnostic_summary(diagnostics)
     with connect() as db:
         db.execute("UPDATE book_pages SET status=?,error_kind=?,error_message=?,updated_at=? WHERE book_id=? AND page_number=? AND status='processing'", (status, kind, message, datetime.now().isoformat(), book_id, page_number))
+
+def current_key_selection():
+    # Reload during cooldown waits so unchecked keys leave scheduling.
+    with connect() as db:
+        return read_key_selection(db)
+
 
 def extract_page(book_id, page_number, stop=None):
     stop = stop or threading.Event()
@@ -96,11 +117,31 @@ def extract_page(book_id, page_number, stop=None):
         transient_keys = set()
         fallback_used = False
         diagnostics = []
+
+        def generate_image(image, **options):
+            nonlocal key, request_day
+            backoff = 30
+            while True:
+                try:
+                    return generate(key['api_key'], image, model, thinking, **options)
+                except Exception as exc:
+                    if not is_service_unavailable(exc):
+                        raise
+                    # A provider outage affects every selected key. Keep this page
+                    # and image, and delay new OCR requests across worker threads.
+                    defer_ocr_requests(max(backoff, retry_delay(exc, 0)))
+                    record_request(key['id'], success=False, status='service_error', request_day=request_day)
+                backoff = min(300, backoff * 2)
+                key = acquire_key('single', [], stop, selection_provider=current_key_selection)
+                request_day = record_request(key['id'])
+
         while attempts < MAX_ATTEMPTS:
-            key = acquire_key(settings.get('ocr_key_mode', 'single'), json.loads(settings.get('ocr_pool_ids', '[]')), stop)
+            key = acquire_key(settings.get('ocr_key_mode', 'single'), json.loads(settings.get('ocr_pool_ids', '[]')), stop, selection_provider=current_key_selection)
             request_day = record_request(key['id'])
             try:
-                text = generate(key['api_key'], image, model, thinking)
+                text = generate_image(image)
+            except (KeysUnavailable, SchedulingPaused):
+                raise
             except Exception as exc:
                 kind = classify_gemini_error(exc)
                 diagnostics.append(_diagnostic(exc, 'normal_png', key['id']))
@@ -112,14 +153,35 @@ def extract_page(book_id, page_number, stop=None):
                     if len(transient_keys) >= 2:
                         if not fallback_used:
                             fallback_used = True
+                            def fallback_generate(image, mime_type='image/png'):
+                                # Each fallback is a new request and must honor current selection.
+                                nonlocal key, request_day
+                                while True:
+                                    key = acquire_key('single', [], stop, selection_provider=current_key_selection)
+                                    request_day = record_request(key['id'])
+                                    try:
+                                        return generate_image(image, mime_type=mime_type)
+                                    except (KeysUnavailable, SchedulingPaused):
+                                        raise
+                                    except Exception as failure:
+                                        category = classify_gemini_error(failure)
+                                        record_request(key['id'], success=False, status=category,
+                                                       cooldown=retry_delay(failure, attempts) if category == 'rate_limited' else 0,
+                                                       request_day=request_day)
+                                        if category not in ('invalid_key', 'quota_exhausted'):
+                                            raise
                             try:
                                 image = render(1.5)
-                                fallback_text = generate(key['api_key'], image, model, thinking)
+                                fallback_text = fallback_generate(image)
+                            except (KeysUnavailable, SchedulingPaused):
+                                raise
                             except Exception as exc:
                                 diagnostics.append(_diagnostic(exc, 'reduced_png', key['id']))
                                 try:
                                     image = render(1.3, 'jpeg', quality=76)
-                                    fallback_text = generate(key['api_key'], image, model, thinking, mime_type='image/jpeg')
+                                    fallback_text = fallback_generate(image, mime_type='image/jpeg')
+                                except (KeysUnavailable, SchedulingPaused):
+                                    raise
                                 except Exception as exc:
                                     diagnostics.append(_diagnostic(exc, 'jpeg_fallback', key['id']))
                                     fallback_text = None
@@ -133,7 +195,7 @@ def extract_page(book_id, page_number, stop=None):
                                         record_request(key['id'], success=True, status='available', request_day=request_day); return True
                         _state(book_id, page_number, 'failed', 'page_service_failure', diagnostics); return False
                 attempts += 1
-                if kind == 'permanent_request' or attempts >= MAX_ATTEMPTS:
+                if kind in ('permanent_request', 'permission_denied') or attempts >= MAX_ATTEMPTS:
                     _state(book_id, page_number, 'failed', kind)
                     return False
                 if kind != 'rate_limited' and stop.wait(delay): raise SchedulingPaused()

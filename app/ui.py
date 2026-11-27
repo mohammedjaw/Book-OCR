@@ -30,8 +30,14 @@ LABELS = {
 }
 
 LABELS.update({
+'selection_help':('وضع المفتاح الواحد يستخدم المفتاح النشط فقط. تغيير اختيار المجموعة يفعّل وضع المجموعة؛ احفظ الإعدادات قبل الاستئناف.','Single mode uses only the active key. Changing a pool checkbox selects pool mode; save settings before resuming.','حالت تک‌کلید فقط از کلید فعال استفاده می‌کند. تغییر گروه حالت گروه را فعال می‌کند؛ پیش از ادامه ذخیره کنید.'),
+'partial_text':('تصدير النص المتاح (يدعم التصدير الجزئي)','Export available text (supports partial export)','برون‌ریزی متن موجود (شامل ناقص)'),
+'partial_text_help':('يمكن التصدير أثناء المعالجة. يتضمن النص المتاح وعدّادات الحالة وعلامات للصفحات غير المستخرجة. يمكن التصدير مجددًا لاحقًا.','Export during processing: includes available text, status counts and placeholders for unavailable pages. Export again later as more pages finish.','هنگام پردازش متن موجود با شمارنده و جای‌نگهدار صفحات صادر می‌شود؛ بعداً دوباره صادر کنید.'),
 'api_keys':('مفاتيح Gemini API','Gemini API keys','کلیدهای Gemini API'),
 'key_name':('اسم المفتاح','Key name','نام کلید'), 'add_key':('إضافة مفتاح API','Add API key','افزودن کلید API'),
+'delete_key':('حذف المفتاح','Delete key','حذف کلید'),
+'delete_key_question':('هل تريد حذف هذا المفتاح من Book-OCR؟','Remove this key from Book-OCR?','این کلید از Book-OCR حذف شود؟'),
+'confirm_key_deletion':('تأكيد الحذف','Confirm deletion','تأیید حذف'),
 'active_key':('مفتاح الاستخراج الحالي','Active OCR key','کلید فعال استخراج'),
 'language':('لغة الواجهة','Interface language','زبان رابط'), 'theme':('مظهر الموقع','Theme','ظاهر'),
 'font':('خط عرض النصوص المستخرجة','Reader font','قلم متن'), 'font_size':('حجم النص','Font size','اندازه متن'),
@@ -58,6 +64,33 @@ LABELS.update({
 LABELS.update({'rerender_retry':('إعادة إنشاء الصفحة من PDF وإعادة الاستخراج','Re-render page from PDF and retry OCR','بازسازی صفحه از PDF و تلاش دوباره برای استخراج متن')})
 
 LABELS.update({'collections': ('المجموعات', 'Collections', 'مجموعه\u200cها'), 'collection': ('المجموعة', 'Collection', 'مجموعه'), 'create_collection': ('إنشاء مجموعة', 'Create collection', 'ایجاد مجموعه'), 'collection_title': ('عنوان المجموعة', 'Collection title', 'عنوان مجموعه'), 'rename_collection': ('تغيير اسم المجموعة', 'Rename collection', 'تغییر نام مجموعه'), 'delete_collection': ('حذف المجموعة الفارغة', 'Delete empty collection', 'حذف مجموعه خالی'), 'collection_not_empty': ('أزل الكتب من المجموعة قبل حذفها. لن تُحذف الكتب.', 'Remove all books from the collection before deleting it. Books will not be deleted.', 'پیش از حذف مجموعه، همه کتاب\u200cها را از آن خارج کنید. کتاب\u200cها حذف نمی\u200cشوند.'), 'volumes': ('الأجزاء', 'Volumes', 'جلدها'), 'volume_number': ('رقم الجزء / الترتيب', 'Volume / order number', 'شماره جلد / ترتیب'), 'volume_help': ('الترتيب تصاعدي؛ الأرقام المتساوية حسب معرّف الكتاب، والأجزاء بلا رقم أخيرًا.', 'Ascending order; ties use book ID, and unnumbered volumes appear last.', 'ترتیب صعودی؛ شماره\u200cهای یکسان بر اساس شناسه کتاب و جلدهای بدون شماره در پایان.'), 'standalone': ('كتاب مستقل', 'Standalone book', 'کتاب مستقل'), 'standalone_books': ('الكتب المستقلة', 'Standalone books', 'کتاب\u200cهای مستقل'), 'assign_collection': ('حفظ المجموعة والترتيب', 'Save collection and order', 'ذخیره مجموعه و ترتیب'), 'add_volume': ('إضافة كتاب موجود', 'Add existing book', 'افزودن کتاب موجود'), 'remove_volume': ('إزالة من المجموعة', 'Remove from collection', 'خارج کردن از مجموعه'), 'save_order': ('حفظ الترتيب', 'Save order', 'ذخیره ترتیب'), 'empty_library': ('لا توجد كتب أو مجموعات.', 'No books or collections yet.', 'هنوز کتاب یا مجموعه\u200cای وجود ندارد.'), 'empty_collection': ('لا توجد أجزاء في هذه المجموعة.', 'This collection has no volumes.', 'این مجموعه جلدی ندارد.'), 'page_count': ('الصفحات', 'Pages', 'صفحات'), 'open_book': ('فتح الكتاب', 'Open book', 'باز کردن کتاب'), 'all_books': ('كل الكتب', 'All books', 'همه کتاب\u200cها'), 'current_volume': ('الجزء المحدد', 'Selected volume', 'جلد انتخاب\u200cشده'), 'search_placeholder': ('ابحث في النصوص', 'Search OCR text', 'جستجو در متن'), 'exact': ('مطابق', 'Exact', 'دقیق'), 'flexible': ('مرن', 'Flexible', 'انعطاف\u200cپذیر'), 'result_count': ('عدد النتائج', 'Results', 'نتایج'), 'of': ('من', 'of', 'از'), 'page_matches': ('عدد المطابقات في الصفحة', 'Matches on page', 'تطابق\u200cها در صفحه'), 'view_text': ('عرض النص', 'View text', 'نمایش متن'), 'open_original': ('فتح الصفحة الأصلية', 'Open original page', 'باز کردن صفحه اصلی'), 'no_results': ('لا توجد نتائج.', 'No results.', 'نتیجه\u200cای یافت نشد.'), 'ready': ('جاهز', 'Ready', 'آماده'), 'جاهز': ('جاهز', 'Ready', 'آماده')})
+
+LABELS.update({
+    'source_fingerprint': ('بصمة المصدر (Git)', 'Source fingerprint (Git tree)', 'اثر انگشت منبع (Git)'),
+    'permission_denied': ('رُفض الوصول', 'Access denied', 'دسترسی رد شد'),
+    'key_add_failed': ('أدخل مفتاحًا صالحًا وغير مكرر.', 'Enter a valid key that is not already saved.', 'کلیدی معتبر وارد کنید که قبلاً ذخیره نشده باشد.'),
+    'about_book_ocr': ('حول Book-OCR', 'About Book-OCR', 'دربارهٔ Book-OCR'),
+    'app_version': ('إصدار التطبيق', 'Application version', 'نسخهٔ برنامه'),
+    'release': ('إصدار رسمي', 'Release', 'نسخهٔ انتشار'),
+    'development': ('نسخة تطوير', 'Development', 'نسخهٔ توسعه'),
+    'build_time': ('تاريخ ووقت البناء', 'Build date and time', 'تاریخ و زمان ساخت'),
+    'source_run': ('تشغيل من المصدر', 'Running from source', 'اجرا از کد منبع'),
+    'git_commit': ('معرّف الالتزام في Git', 'Git commit', 'شناسهٔ کامیت Git'),
+    'unknown_commit': ('غير متوفر', 'Unavailable', 'در دسترس نیست'),
+    'latest_published': ('أحدث إصدار منشور على GitHub', 'Latest published GitHub release', 'تازه‌ترین نسخهٔ منتشرشده در GitHub'),
+    'stable': ('مستقر', 'Stable', 'پایدار'),
+    'prerelease': ('إصدار تمهيدي', 'Prerelease', 'پیش‌انتشار'),
+    'not_checked': ('لم يتم التحقق بعد', 'Not checked yet', 'هنوز بررسی نشده است'),
+    'check_updates': ('التحقق من التحديثات', 'Check for Updates', 'بررسی به‌روزرسانی‌ها'),
+    'official_repository': ('المستودع الرسمي على GitHub', 'Official GitHub repository', 'مخزن رسمی در GitHub'),
+    'no_releases': ('لا توجد إصدارات منشورة.', 'No published releases.', 'هنوز نسخه‌ای منتشر نشده است.'),
+    'no_stable': ('لا يوجد إصدار مستقر منشور.', 'No stable release has been published.', 'هنوز نسخهٔ پایداری منتشر نشده است.'),
+    'update_available': ('يتوفر إصدار مستقر أحدث.', 'A newer stable release is available.', 'نسخهٔ پایدار جدیدتری در دسترس است.'),
+    'version_current': ('رقم إصدار التطبيق يطابق أحدث إصدار مستقر.', 'This version number matches the latest stable release.', 'شمارهٔ این نسخه با آخرین نسخهٔ پایدار یکسان است.'),
+    'version_ahead': ('رقم الإصدار المحلي أحدث من الإصدار المستقر.', 'This version is ahead of the latest stable release.', 'شمارهٔ نسخهٔ محلی از آخرین نسخهٔ پایدار جدیدتر است.'),
+    'comparison_unavailable': ('تعذرت مقارنة رقمي الإصدار.', 'The version numbers could not be compared.', 'مقایسهٔ شمارهٔ نسخه‌ها امکان‌پذیر نبود.'),
+    'update_check_failed': ('تعذر التحقق من إصدارات GitHub. حاول مجددًا لاحقًا.', 'Could not check GitHub Releases. Try again later.', 'بررسی نسخه‌های GitHub امکان‌پذیر نبود. بعداً دوباره تلاش کنید.'),
+})
 
 def preferences(request):
     with connect() as db: prefs = {r['key']:r['value'] for r in db.execute('SELECT * FROM settings')}

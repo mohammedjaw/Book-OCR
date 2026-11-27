@@ -20,17 +20,29 @@ def digest_file(path):
 
 def export_package(uid):
     with connect() as db:
+        db.execute('PRAGMA query_only=ON')
+        db.execute('BEGIN')
         book = db.execute('SELECT * FROM books WHERE book_uuid=?', (uid,)).fetchone()
         if not book: raise ValueError('Book not found')
         pages = db.execute('SELECT * FROM book_pages WHERE book_id=? ORDER BY page_number', (book['id'],)).fetchall()
-    if len(pages) != book['page_count'] or any(p['status'] != 'completed' or p['extracted_text'] is None for p in pages):
-        raise ValueError('Complete every page before exporting a portable book.')
+    if len(pages) != book['page_count'] or any(p['page_number'] != n for n,p in enumerate(pages,1)):
+        raise ValueError('The book has missing or invalid page records; no package was exported.')
+    if any(p['status'] not in ('completed','pending','processing','failed') or
+           (p['status'] == 'completed' and not isinstance(p['extracted_text'],str)) for p in pages):
+        raise ValueError('The book has invalid page status or completed text; no package was exported.')
+    complete = all(p['status'] == 'completed' for p in pages)
+    version = 1 if complete else 2
     pdf = Path(book['file_path'])
-    manifest = {'format':'Book-OCR-Package','format_version':1,'book_uuid':book['book_uuid'],
+    manifest = {'format':'Book-OCR-Package','format_version':version,'book_uuid':book['book_uuid'],
                 'title':book['title'],'original_filename':PureWindowsPath(book['original_filename']).name,
                 'page_count':book['page_count'],'sha256':digest_file(pdf),'created_at':book['created_at']}
-    data = [{'page_number':p['page_number'],'status':'completed','extracted_text':p['extracted_text'],
+    data = [{'page_number':p['page_number'],'status':p['status'],'extracted_text':p['extracted_text'],
              'line_count':p['line_count'],'model':p['model'],'thinking_level':p['thinking_level']} for p in pages]
+    if not complete:
+        # Version 1 remains complete-only. Version 2 explicitly carries resumable state.
+        manifest['resume_policy'] = 'processing_to_pending'
+        for item,page in zip(data,pages):
+            item.update({field:page[field] for field in ('error_kind','error_message','created_at','updated_at')})
     with tempfile.NamedTemporaryFile(suffix='.bookocr.zip', delete=False) as temp: path = temp.name
     try:
         with zipfile.ZipFile(path,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
@@ -62,18 +74,31 @@ def import_package(upload):
                 pages = json.loads(archive.read('pages.json'))
                 with archive.open('original.pdf') as incoming, source.open('wb') as out:
                     shutil.copyfileobj(incoming,out)
-            if not isinstance(manifest,dict) or manifest.get('format') != 'Book-OCR-Package' or type(manifest.get('format_version')) is not int or manifest['format_version'] != 1:
+            if not isinstance(manifest,dict) or manifest.get('format') != 'Book-OCR-Package' or type(manifest.get('format_version')) is not int or manifest['format_version'] not in (1,2):
                 raise ValueError('Unsupported package format or version')
+            version = manifest['format_version']
+            if version == 2 and manifest.get('resume_policy') != 'processing_to_pending':
+                raise ValueError('Unsupported incomplete-package resume policy')
             uid = str(uuid.UUID(manifest['book_uuid']))
             if uid != manifest['book_uuid']: raise ValueError('Invalid book identifier')
             count = manifest.get('page_count')
             if type(count) is not int or not 1 <= count <= 100000: raise ValueError('Invalid page count')
             if not isinstance(pages,list) or len(pages) != count: raise ValueError('Invalid page count')
             for number,page in enumerate(pages,1):
-                if not isinstance(page,dict) or type(page.get('page_number')) is not int or page['page_number'] != number or page.get('status') != 'completed' or not isinstance(page.get('extracted_text'),str):
+                if not isinstance(page,dict) or type(page.get('page_number')) is not int or page['page_number'] != number:
                     raise ValueError('Invalid page order, status or text')
+                status, text = page.get('status'), page.get('extracted_text')
+                if status not in (('completed',) if version == 1 else ('completed','pending','processing','failed')):
+                    raise ValueError('Invalid page status')
+                if (status == 'completed' and not isinstance(text,str)) or (text is not None and not isinstance(text,str)):
+                    raise ValueError('Invalid page text')
                 if any(page.get(k) is not None and not isinstance(page[k],str) for k in ('model','thinking_level')):
                     raise ValueError('Invalid page metadata')
+                if version == 2:
+                    if any(page.get(k) is not None and not isinstance(page[k],str) for k in ('error_kind','error_message','created_at','updated_at')):
+                        raise ValueError('Invalid unfinished-page metadata')
+                    if page.get('line_count') is not None and (type(page['line_count']) is not int or page['line_count'] < 0):
+                        raise ValueError('Invalid page line count')
             if not isinstance(manifest.get('title'),str) or not manifest['title'].strip(): raise ValueError('Invalid book title')
             original = manifest.get('original_filename')
             if not isinstance(original,str) or not original or PureWindowsPath(original).name != original or '/' in original:
@@ -91,11 +116,19 @@ def import_package(upload):
                     raise ValueError('This book already exists')
                 target = BOOKS/(uid + '_' + uuid.uuid4().hex + '.pdf')
                 with source.open('rb') as incoming, target.open('xb') as out: shutil.copyfileobj(incoming,out)
-                book_id = db.execute('INSERT INTO books(book_uuid,title,original_filename,stored_filename,file_path,file_hash,page_count,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)', (uid,manifest['title'],original,target.name,str(target),digest,count,'completed',now,now)).lastrowid
+                complete = all(p['status'] == 'completed' for p in pages)
+                book_id = db.execute('INSERT INTO books(book_uuid,title,original_filename,stored_filename,file_path,file_hash,page_count,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)', (uid,manifest['title'],original,target.name,str(target),digest,count,'completed' if complete else 'paused',now,now)).lastrowid
                 for page in pages:
                     text = page['extracted_text']
-                    page_id = db.execute("INSERT INTO book_pages(book_id,page_number,status,extracted_text,line_count,model,thinking_level,created_at,updated_at) VALUES(?,?,'completed',?,?,?,?,?,?)", (book_id,page['page_number'],text,len(text.splitlines()),page.get('model'),page.get('thinking_level'),now,now)).lastrowid
-                    db.execute('INSERT INTO page_search VALUES(?,?,?)',(page_id,text,normalize_arabic(text)))
+                    # A processing claim belongs to the exporting process, never the recipient.
+                    status = 'pending' if page['status'] == 'processing' else page['status']
+                    line_count = page.get('line_count') if version == 2 else len(text.splitlines())
+                    created_at = page.get('created_at') if version == 2 else None
+                    updated_at = page.get('updated_at') if version == 2 else None
+                    page_id = db.execute('INSERT INTO book_pages(book_id,page_number,status,extracted_text,line_count,model,thinking_level,error_kind,error_message,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                        (book_id,page['page_number'],status,text,line_count,page.get('model'),page.get('thinking_level'),page.get('error_kind') if version == 2 else None,page.get('error_message') if version == 2 else None,now if created_at is None else created_at,now if updated_at is None else updated_at)).lastrowid
+                    if status == 'completed':
+                        db.execute('INSERT INTO page_search VALUES(?,?,?)',(page_id,text,normalize_arabic(text)))
             committed = True
             return uid
     except (ValueError,KeyError,TypeError,zipfile.BadZipFile,UnicodeError,RuntimeError) as exc:

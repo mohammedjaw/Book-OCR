@@ -9,7 +9,7 @@ from ..ocr_service import extract_page
 from ..ocr_worker import start, pause, active, state, rerender_failed_page, RETRYABLE, _lock as worker_lock
 from ..search_service import highlight_text, count_matches, search_pages, parse_scope
 from ..package_service import export_package
-from ..export_service import make_json, make_docx, book_data
+from ..export_service import make_json, make_docx, book_data, make_text
 from urllib.parse import urlencode
 from fastapi.responses import FileResponse
 from ..ui import templates; router=APIRouter()
@@ -45,6 +45,7 @@ def ocr_status(uid:str):
     book = require_book(uid)
     with connect() as db:
         rows = db.execute('SELECT status,COUNT(*) count FROM book_pages WHERE book_id=? GROUP BY status',(book['id'],)).fetchall()
+        text_ready = db.execute("SELECT EXISTS(SELECT 1 FROM book_pages WHERE book_id=? AND status='completed' AND length(extracted_text)>0)",(book['id'],)).fetchone()[0]
         eligible = db.execute(f"SELECT COUNT(*) FROM book_pages WHERE book_id=? AND status='failed' AND {RETRYABLE}",(book['id'],)).fetchone()[0]
     counts = dict.fromkeys(('completed','pending','processing','failed'),0)
     counts.update({r['status']:r['count'] for r in rows})
@@ -52,7 +53,7 @@ def ocr_status(uid:str):
     current = live_state or ('completed' if counts['completed'] == book['page_count'] else book['status'])
     if current not in ('running','pausing','paused','completed','keys_unavailable','application_error'): current = 'stopped'
     return {'total':book['page_count'], 'counts':counts, 'active':live_state is not None,
-            'state':current, 'retryable_failed':eligible, 'complete':counts['completed']==book['page_count']}
+            'state':current, 'retryable_failed':eligible, 'text_ready':bool(text_ready), 'complete':counts['completed']==book['page_count']}
 
 def render_detail(request:Request,uid:str,error=None,success=None):
     require_book(uid)
@@ -60,7 +61,8 @@ def render_detail(request:Request,uid:str,error=None,success=None):
         book=db.execute("SELECT * FROM books WHERE book_uuid=?",(uid,)).fetchone()
         stats=db.execute("SELECT status,COUNT(*) count FROM book_pages WHERE book_id=? GROUP BY status",(book['id'],)).fetchall() if book else []
         collections=db.execute('SELECT * FROM collections ORDER BY title,id').fetchall()
-    return templates.TemplateResponse(request=request,name="book_detail.html",context={"book":book,"collections":collections,"counts":{r['status']:r['count'] for r in stats},"error":error,"success":success,"active":active(book['id']) if book else False})
+        text_ready = db.execute("SELECT EXISTS(SELECT 1 FROM book_pages WHERE book_id=? AND status='completed' AND length(extracted_text)>0)",(book['id'],)).fetchone()[0]
+    return templates.TemplateResponse(request=request,name="book_detail.html",context={"book":book,"collections":collections,"text_ready":bool(text_ready),"counts":{r['status']:r['count'] for r in stats},"error":error,"success":success,"active":active(book['id']) if book else False})
 
 @router.post("/books/{uid}/ocr/start")
 def start_ocr(request:Request,uid:str):
@@ -125,7 +127,10 @@ def export_docx(uid:str):
     path,name=make_docx(uid); return FileResponse(path,media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',filename=name,background=BackgroundTask(os.unlink,path))
 @router.get('/books/{uid}/export/package')
 def export_package_route(uid:str):
-    ensure_complete(uid); path,name=export_package(uid); return FileResponse(path,media_type='application/zip',filename=name,background=BackgroundTask(os.unlink,path))
+    require_book(uid)
+    try: path,name=export_package(uid)
+    except ValueError as exc: raise HTTPException(409,str(exc)) from None
+    return FileResponse(path,media_type='application/zip',filename=name,background=BackgroundTask(os.unlink,path))
 def ensure_complete(uid):
     with connect() as db: row=db.execute("SELECT b.page_count,COALESCE(SUM(p.status='completed'),0) completed,COALESCE(SUM(p.status!='completed'),0) unfinished FROM books b LEFT JOIN book_pages p ON p.book_id=b.id WHERE b.book_uuid=? GROUP BY b.id",(uid,)).fetchone()
     if not row or row['completed']!=row['page_count'] or row['unfinished']: raise HTTPException(409,'خيارات التصدير متاحة بعد اكتمال استخراج جميع صفحات الكتاب بنجاح.')
@@ -189,3 +194,9 @@ def delete_book(request:Request,uid:str,confirm:str=Form('')):
             raise
         if moved: quarantine.unlink()
     return RedirectResponse('/books',303)
+
+
+@router.get('/books/{uid}/export/{ext}')
+def export_text(uid: str, ext: str):
+    path, name = make_text(uid, ext)
+    return FileResponse(path, media_type='text/markdown; charset=utf-8' if ext == 'md' else 'text/plain; charset=utf-8', filename=name, background=BackgroundTask(os.unlink, path))

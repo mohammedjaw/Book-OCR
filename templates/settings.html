@@ -4,16 +4,31 @@
 {% if request.query_params.get('saved') %}<div class="success">{{tr('saved')}}</div>{% endif %}
 {% if message %}<div class="success">{{ message }}</div>{% endif %}
 {% if key_error == 'limit' %}<div class="error">{{ tr('key_limit_reached') }}</div>{% endif %}
+{% if key_error == 'invalid' %}<div class="error">{{ tr('key_add_failed') }}</div>{% endif %}
 {% if test_result %}<div class="notice" role="alert">{{ test_result|safe }}</div>{% endif %}
 <section class="settings-section"><h2>{{tr('api_keys')}}</h2>
 <form class="settings-form key-add-form" method="post" action="/settings/keys/add"><input name="name" placeholder="{{tr('key_name')}}"><input name="new_api_key" type="password" placeholder="مفتاح API"><button>{{tr('add_key')}}</button></form>
+{% if settings.gemini_keys and not settings.can_delete_keys %}
+<p class="notice" role="status">{{ {'ar': 'لتفعيل حذف المفاتيح، أعد تشغيل Book-OCR بعد انتهاء الاستخراج، ثم افتح الإعدادات مجددًا.', 'en': 'To enable key deletion, restart Book-OCR once OCR finishes, then reopen Settings.', 'fa': 'برای فعال کردن حذف کلید، پس از پایان استخراج، Book-OCR را دوباره اجرا کنید و تنظیمات را باز کنید.'}.get(lang, '') }}</p>
+{% endif %}
+{% for key in settings.gemini_keys %}
+<div class="key-summary"><strong>{{ key.name }}</strong> — {{ key.masked_key }}<br>{{tr('requests')}}: {{ key.requests }} · {{tr('successes')}}: {{ key.successes }} · {{tr('failures')}}: {{ key.failures }}<br>{{tr('status')}}: {{ tr(key.last_status or 'available') }}
+  {% if settings.can_delete_keys %}
+  <details><summary>{{ tr('delete_key') }}</summary>
+    <form method="post" action="{{ request.url_for('delete_gemini_key', key_id=key.id).path }}">
+      <p>{{ tr('delete_key_question') }} <strong>{{ key.name }}</strong> — {{ key.masked_key }}</p>
+      <button name="confirmation" value="delete">{{ tr('confirm_key_deletion') }}</button>
+    </form>
+  </details>
+  {% endif %}
+</div>
+{% endfor %}
 <form class="settings-form" method="post">
   <label>{{tr('active_key')}}<select name="active_key_id">{% for key in settings.gemini_keys %}<option value="{{ key.id }}" {% if key.is_active %}selected{% endif %}>{{ key.name }} — {{ key.masked_key }}</option>{% endfor %}</select></label>
   <label>{{tr('key_mode')}}<select name="ocr_key_mode"><option value="single" {% if settings.ocr_key_mode != 'pool' %}selected{% endif %}>{{tr('single')}}</option><option value="pool" {% if settings.ocr_key_mode == 'pool' %}selected{% endif %}>{{tr('pool')}}</option></select></label>
-  <fieldset><legend>{{tr('pool')}}</legend><input type="hidden" name="pool_present" value="1">{% for key in settings.gemini_keys %}<label class="checkbox"><input type="checkbox" name="pool_ids" value="{{key.id}}" {% if key.id in settings.pool_ids %}checked{% endif %}>{{key.name}} — {{key.masked_key}}</label>{% endfor %}</fieldset>
+  <p>{{tr('selection_help')}}</p><fieldset><legend>{{tr('pool')}}</legend><input type="hidden" name="pool_present" value="1">{% for key in settings.gemini_keys %}<label class="checkbox"><input type="checkbox" name="pool_ids" onchange="this.form.elements.ocr_key_mode.value='pool'" value="{{key.id}}" {% if key.id in settings.pool_ids %}checked{% endif %}>{{key.name}} — {{key.masked_key}}</label>{% endfor %}</fieldset>
   <p>{{tr('local_counters')}}</p>
   <p>{{tr('active_key')}}: {{ (settings.gemini_keys|selectattr('is_active')|map(attribute='name')|first) or 'لا يوجد' }}</p>
-  {% for key in settings.gemini_keys %}<div class="key-summary"><strong>{{ key.name }}</strong> — {{ key.masked_key }}<br>{{tr('requests')}}: {{ key.requests }} · {{tr('successes')}}: {{ key.successes }} · {{tr('failures')}}: {{ key.failures }}<br>{{tr('status')}}: {{ tr(key.last_status or 'available') }}</div>{% endfor %}
   <label>{{tr('language')}}
     <select name="ui_language" id="ui-language">
       <option value="ar" {% if settings.ui_language == 'ar' %}selected{% endif %}>العربية</option>
@@ -47,6 +62,25 @@
   <input type="hidden" name="api_key" value="">
   <button>{{tr('save')}}</button>
 </form></section>
+{% if build %}
+<section id="about" class="settings-section" aria-labelledby="about-title">
+  <h2 id="about-title">{{ tr('about_book_ocr') }}</h2>
+  <p>{{ tr('app_version') }} <bdi dir="ltr">{{ build.version }}</bdi> · {{ tr(build.status) }}</p>
+  <p>{{ tr('build_time') }} · {% if build.built_at %}<bdi dir="ltr">{{ build.built_at }}</bdi>{% else %}{{ tr('source_run') }}{% endif %}</p>
+  <p>{{ tr('git_commit') }} · {% if build.commit %}<bdi dir="ltr" title="{{ build.commit }}">{{ build.commit[:12] }}</bdi>{% else %}{{ tr('unknown_commit') }}{% endif %}</p>
+  {% if build.fingerprint %}<p>{{ tr('source_fingerprint') }} · <bdi dir="ltr" title="{{ build.fingerprint }}">{{ build.fingerprint[:12] }}</bdi></p>{% endif %}
+  <p>{{ tr('latest_published') }} ·
+    {% if release_check and release_check.latest %}
+      <bdi dir="ltr">{{ release_check.latest }}</bdi> ({{ tr('prerelease' if release_check.prerelease else 'stable') }})
+    {% elif release_check %}{{ tr(release_check.message) }}{% else %}{{ tr('not_checked') }}{% endif %}
+  </p>
+  {% if release_check and release_check.latest %}
+    <p role="status">{{ tr(release_check.message) }} {% if release_check.stable %}(<bdi dir="ltr">{{ release_check.stable }}</bdi>){% endif %}</p>
+  {% endif %}
+  <form method="post" action="/settings/check-updates"><button class="secondary-button">{{ tr('check_updates') }}</button></form>
+  <a href="{{ repository }}" target="_blank" rel="noopener noreferrer">{{ tr('official_repository') }}</a>
+</section>
+{% endif %}
 <section class="settings-section settings-test"><h2>Gemini</h2><form method="post" action="/settings/test"><button class="secondary-button">{{tr('test_connection')}}</button></form></section>
 <section class="settings-section"><h2>API Key Backup</h2><form method="post" action="/settings/keys/backup/export"><label>Password / passphrase<input name="password" type="password" minlength="12" required autocomplete="new-password"></label><label>Confirm password<input name="confirmation" type="password" minlength="12" required autocomplete="new-password"></label><button class="secondary-button">Export encrypted backup</button></form><form method="post" action="/settings/keys/backup/import" enctype="multipart/form-data"><label>Encrypted backup<input name="file" type="file" accept=".bookocr-keys" required></label><label>Password / passphrase<input name="password" type="password" required autocomplete="current-password"></label><label>Import mode<select name="mode"><option value="merge">Merge</option><option value="replace">Replace</option></select></label><label>For Replace, type REPLACE<input name="replace_confirmation" autocomplete="off"></label><button class="secondary-button">Import encrypted backup</button></form></section>
 <script>

@@ -3,11 +3,11 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const elements = {};
-for (const id of ['ocr-status','status-labels','completed','processing','pending','failed','progress','progress-text','worker-text','poll-error','exports','start-form','pause-form','retry-form']) elements[id] = {textContent:'',button:{},querySelector(){return this.button;}};
+for (const id of ['ocr-status','status-labels','completed','processing','pending','failed','progress','progress-text','worker-text','poll-error','exports','text-exports','start-form','pause-form','retry-form']) elements[id] = {textContent:'',button:{},querySelector(){return this.button;}};
 elements['ocr-status'].dataset = {url:'/status'};
 elements['ocr-status'].querySelectorAll = () => [];
 elements['status-labels'].textContent = JSON.stringify({running:'Running',completed:'Completed',connection_error:'Retrying'});
-let callback, delay, calls = 0, result = {total:8,counts:{completed:2,processing:2,pending:4,failed:0},active:true,state:'running',retryable_failed:0,complete:false};
+let callback, delay, calls = 0, result = {total:8,counts:{completed:2,processing:2,pending:4,failed:0},active:true,state:'running',retryable_failed:0,complete:false,text_ready:true};
 const context = {
  document:{hidden:false,getElementById:id=>elements[id],addEventListener(){}},
  fetch:async()=>{calls++; if(result instanceof Error) throw result;return {ok:true,json:async()=>result};},
@@ -17,6 +17,7 @@ vm.runInNewContext(fs.readFileSync('static/js/book-status.js','utf8'),context);
 const flush = () => new Promise(resolve=>setImmediate(resolve));
 (async()=>{
  await flush();
+ assert.equal(elements['text-exports'].hidden,false);
  assert.equal(elements.completed.textContent,2);assert.equal(elements.progress.value,2);
  assert.equal(elements['start-form'].button.disabled,true);assert.equal(elements['pause-form'].button.disabled,false);assert.equal(delay,3000);
  result = new Error('offline');await callback();assert.equal(elements['poll-error'].textContent,'Retrying');assert.equal(delay,6000);

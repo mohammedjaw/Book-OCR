@@ -1,6 +1,14 @@
 # PyInstaller onedir build. The launcher starts the same bundled executable in
 # --serve mode, so the installed machine never needs a system Python runtime.
+from pathlib import Path
+import sys
 from PyInstaller.utils.hooks import collect_all, collect_data_files
+
+sys.path.insert(0, SPECPATH)
+from app.build_info import write_build_module
+
+metadata_dir = Path(workpath) / "metadata"
+write_build_module(metadata_dir)
 
 pymupdf_datas, pymupdf_binaries, pymupdf_hiddenimports = collect_all("pymupdf")
 
@@ -11,6 +19,7 @@ datas = [
 ] + pymupdf_datas + collect_data_files("tzdata")
 
 hiddenimports = pymupdf_hiddenimports + [
+    "_book_ocr_build",
     # ``main:app`` is loaded by Uvicorn from a string in --serve mode.
     "main",
     # Uvicorn chooses protocol/loop implementations dynamically.
@@ -21,7 +30,7 @@ hiddenimports = pymupdf_hiddenimports + [
 ]
 
 a = Analysis(
-    ["launcher.py"], pathex=[], binaries=pymupdf_binaries, datas=datas,
+    ["launcher.py"], pathex=[str(metadata_dir)], binaries=pymupdf_binaries, datas=datas,
     hiddenimports=hiddenimports, hookspath=[], hooksconfig={}, runtime_hooks=[],
     excludes=["pytest", "unittest", "tests"], noarchive=False,
 )

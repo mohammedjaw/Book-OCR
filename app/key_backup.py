@@ -2,8 +2,9 @@
 import base64, json, os, uuid
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
-from .gemini_key_manager import MAX_GEMINI_API_KEYS
-from .secrets import LOCK, load_secrets, save_secrets
+from .gemini_key_manager import MAX_GEMINI_API_KEYS, _store
+from .database import connect, read_key_selection
+from .secrets import LOCK, commit_with_selection
 
 MAGIC = 'Book-OCR-Key-Backup'; VERSION = 1
 KDF = {'name':'scrypt','n':32768,'r':8,'p':1,'length':32}
@@ -11,14 +12,21 @@ KDF = {'name':'scrypt','n':32768,'r':8,'p':1,'length':32}
 def _derive(password, salt):
     return Scrypt(salt=salt, length=KDF['length'], n=KDF['n'], r=KDF['r'], p=KDF['p']).derive(password.encode('utf-8'))
 
-def _payload(data):
+def _payload(data, mode, pool):
     keys = data.get('gemini_api_keys', [])
     return {'keys':[{'id':k['id'],'name':k.get('name',''),'api_key':k['api_key'],'enabled':bool(k.get('enabled',True))} for k in keys],
-            'active_key_id':data.get('active_gemini_key_id'),'ocr_key_mode':data.get('ocr_key_mode','single'),'ocr_pool_ids':data.get('ocr_pool_ids',[])}
+            'active_key_id':data.get('active_gemini_key_id'),'ocr_key_mode':mode,'ocr_pool_ids':pool}
 
 def export_backup(password):
     if len(password) < 12: raise ValueError('Use a password with at least 12 characters.')
-    with LOCK: payload = json.dumps(_payload(load_secrets()), ensure_ascii=False, separators=(',',':')).encode()
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        with LOCK:
+            data, keys = _store()
+            mode, pool = read_key_selection(db)
+            known = {key['id'] for key in keys}
+            snapshot = _payload(data, mode, [key_id for key_id in pool if key_id in known])
+    payload = json.dumps(snapshot, ensure_ascii=False, separators=(',', ':')).encode()
     salt, nonce = os.urandom(16), os.urandom(12)
     header = {'magic':MAGIC,'version':VERSION,'algorithm':'AES-256-GCM','kdf':KDF,'salt':base64.b64encode(salt).decode(),'nonce':base64.b64encode(nonce).decode()}
     cipher = AESGCM(_derive(password, salt)).encrypt(nonce, payload, json.dumps(header,sort_keys=True,separators=(',',':')).encode())
@@ -49,20 +57,37 @@ def decrypt_backup(blob, password):
 def restore_backup(blob, password, mode, confirmed=False):
     incoming=decrypt_backup(blob,password)
     if mode not in ('merge','replace') or (mode == 'replace' and not confirmed): raise ValueError('Replace requires explicit confirmation.')
-    with LOCK:
-        current=load_secrets(); existing=current.get('gemini_api_keys',[])
-        if mode == 'replace': final=[dict(item) for item in incoming['keys']]; active=incoming['active_key_id']; pool=incoming['ocr_pool_ids']; key_mode=incoming['ocr_key_mode']
-        else:
-            final=[dict(item) for item in existing]; known_secrets={item.get('api_key') for item in final}; known_ids={item.get('id') for item in final}; remap={}
-            for item in incoming['keys']:
-                if item['api_key'] in known_secrets: continue
-                copy=dict(item)
-                if copy['id'] in known_ids: copy['id']=str(uuid.uuid4())
-                remap[item['id']]=copy['id']; final.append(copy); known_secrets.add(copy['api_key']); known_ids.add(copy['id'])
-            if len(final)>MAX_GEMINI_API_KEYS: raise ValueError('Import would exceed the maximum of 10 Gemini keys.')
-            active=current.get('active_gemini_key_id') or remap.get(incoming['active_key_id'])
-            pool=current.get('ocr_pool_ids',[]) or [remap[item] for item in incoming['ocr_pool_ids'] if item in remap]
-            key_mode=current.get('ocr_key_mode','single')
-        if len(final)>MAX_GEMINI_API_KEYS: raise ValueError('Import would exceed the maximum of 10 Gemini keys.')
-        current['gemini_api_keys']=final; current.pop('gemini_api_key',None); current['active_gemini_key_id']=active; current['ocr_key_mode']=key_mode; current['ocr_pool_ids']=pool
-        save_secrets(current)
+    with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        with LOCK:
+            current, existing = _store()
+            if mode == 'replace' or not existing:
+                final = incoming['keys']
+                active = incoming['active_key_id']
+                key_mode, pool = incoming['ocr_key_mode'], incoming['ocr_pool_ids']
+            else:
+                # Existing scheduler choices (including an empty pool) survive merge.
+                key_mode, pool = read_key_selection(db)
+                final = list(existing)
+                ids = {item['id'] for item in final}
+                by_secret = {item['api_key']: item['id'] for item in final}
+                remap = {}
+                for item in incoming['keys']:
+                    if item['api_key'] not in by_secret:
+                        new_id = str(uuid.uuid4()) if item['id'] in ids else item['id']
+                        final.append({**item, 'id': new_id})
+                        ids.add(new_id)
+                        by_secret[item['api_key']] = new_id
+                    remap[item['id']] = by_secret[item['api_key']]
+                active = current.get('active_gemini_key_id') or remap.get(incoming['active_key_id'])
+            if len(final) > MAX_GEMINI_API_KEYS:
+                raise ValueError('Import would exceed the maximum of 10 Gemini keys.')
+            enabled = [item['id'] for item in final if item['enabled']]
+            if active not in enabled:
+                active = next(iter(enabled), None)
+            current.update(gemini_api_keys=final, active_gemini_key_id=active)
+            for legacy in ('gemini_api_key', 'ocr_key_mode', 'ocr_pool_ids'):
+                current.pop(legacy, None)
+            db.executemany('INSERT OR REPLACE INTO settings VALUES (?,?)',
+                           [('ocr_key_mode', key_mode), ('ocr_pool_ids', json.dumps(pool))])
+            commit_with_selection(db, current)

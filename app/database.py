@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from .secrets import load_secrets, save_secrets
 from .paths import DATABASE_FILE
 
@@ -15,6 +16,10 @@ def connect():
     db = sqlite3.connect(DB, timeout=30, factory=Connection)
     db.row_factory = sqlite3.Row
     return db
+
+def read_key_selection(db):
+    values = dict(db.execute("SELECT key,value FROM settings WHERE key IN ('ocr_key_mode','ocr_pool_ids')"))
+    return values.get('ocr_key_mode', 'single'), json.loads(values.get('ocr_pool_ids', '[]'))
 
 def init_db():
     DB.parent.mkdir(exist_ok=True)

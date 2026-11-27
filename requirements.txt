@@ -8,3 +8,4 @@ python-docx
 markupsafe
 tzdata
 cryptography
+packaging

@@ -37,7 +37,7 @@ Publication-safe screenshots are not included yet. Screenshots added in the futu
 
 For ordinary Windows use, open [GitHub Releases](https://github.com/mohammedjaw/Book-OCR/releases) and download:
 
-`Book-OCR-0.2.3-Windows-x64.zip`
+`Book-OCR-0.3.0-Windows-x64.zip`
 
 No Python installation is required for this build. Extract the complete ZIP before running the application.
 
@@ -47,8 +47,8 @@ The packaged application is currently validated for 64-bit Windows. No packaged 
 
 ## Quick Start
 
-1. Download `Book-OCR-0.2.3-Windows-x64.zip` from GitHub Releases.
-2. Extract the entire `Book-OCR-0.2.3-Windows-x64` folder.
+1. Download `Book-OCR-0.3.0-Windows-x64.zip` from GitHub Releases.
+2. Extract the entire `Book-OCR-0.3.0-Windows-x64` folder.
 3. Run `Book-OCR.exe`.
 4. Your default browser opens the local Book-OCR interface.
 5. Add a Gemini API key in **Settings** if you want to perform OCR.
@@ -86,7 +86,7 @@ See [SECURITY.md](SECURITY.md) for responsible reporting guidance.
 
 ## API Key Backup
 
-Settings can export saved Gemini API keys and active-key metadata to a password-encrypted `.bookocr-keys` file and restore them later in merge or replace mode. The password is not stored by Book-OCR. Keep the backup file and its password separately; the backup contains credentials even though its contents are encrypted.
+Settings can export saved Gemini API keys and the effective active key, scheduler mode, and pool to a password-encrypted `.bookocr-keys` file and restore them later in merge or replace mode. The password is not stored by Book-OCR. Keep the backup file and its password separately; the backup contains credentials even though its contents are encrypted.
 
 ## Collections
 
@@ -96,7 +96,7 @@ A collection package can be exported only when every volume has OCR text for eve
 
 ## Portable Packages
 
-An individual book package contains a format manifest, the original PDF, and completed page-level OCR data. A collection package contains collection metadata and the corresponding portable content for each ordered volume. Imports validate archive structure, identifiers, page counts, PDF hashes, and supported format versions before committing data.
+An individual book package contains a format manifest, the original PDF, and page-level OCR data. Complete books use v1. Incomplete books use v2 and resume interrupted pages as pending. Earlier releases cannot import incomplete v2 packages. A collection package contains collection metadata and the corresponding portable content for each ordered volume. Imports validate archive structure, identifiers, page counts, PDF hashes, and supported format versions before committing data.
 
 These packages are intended for transfer between Book-OCR libraries. Treat them as sensitive whenever the underlying books or OCR text are private or copyrighted.
 
@@ -164,9 +164,9 @@ Mutable packaged data is resolved separately from bundled templates and static a
 
 ## Project Status
 
-Current version: **0.2.3**.
+Current version: **0.3.0**.
 
-Version 0.2.3 is the current public release and the currently validated 64-bit Windows build. See [CHANGELOG.md](CHANGELOG.md) for release history.
+See [release history](CHANGELOG.md) and [Windows rollback instructions](ROLLBACK.md).
 
 ## Roadmap
 

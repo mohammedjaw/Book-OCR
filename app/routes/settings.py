@@ -4,11 +4,12 @@ from fastapi import UploadFile, File
 from fastapi.templating import Jinja2Templates
 
 from ..database import connect
-from ..secrets import load_secrets, save_secrets
+from ..secrets import load_secrets
 from ..ocr_service import classify_gemini_error
-from markupsafe import Markup, escape
-from ..gemini_key_manager import list_keys, get_active_key, set_active_key, MAX_GEMINI_API_KEYS
+from ..gemini_key_manager import list_keys, get_active_key, set_active_key, delete_key, MAX_GEMINI_API_KEYS
 from ..key_backup import export_backup, restore_backup
+from ..build_info import running_build
+from ..releases import REPOSITORY, check_releases
 
 
 from ..ui import templates
@@ -34,8 +35,18 @@ def add_gemini_key(name: str = Form(''), new_api_key: str = Form('')):
     data = load_secrets()
     if len(data.get('gemini_api_keys', [])) >= MAX_GEMINI_API_KEYS:
         return RedirectResponse('/settings?key_error=limit', 303)
-    add_key(name, secret)
+    if not add_key(name, secret):
+        return RedirectResponse('/settings?key_error=invalid', 303)
     return RedirectResponse('/settings', 303)
+
+
+@router.post('/settings/keys/{key_id}/delete')
+def delete_gemini_key(key_id: str, confirmation: str = Form('')):
+    if confirmation != 'delete':
+        raise HTTPException(400, 'Deletion requires confirmation.')
+    if not delete_key(key_id):
+        raise HTTPException(404, 'Key not found.')
+    return RedirectResponse('/settings?saved=1', 303)
 
 
 def get_settings_context():
@@ -52,14 +63,14 @@ def get_settings_context():
         get_active_key()
     )
     settings['gemini_keys'] = list_keys()
+    settings['can_delete_keys'] = True
 
     import json
     settings['pool_ids'] = json.loads(settings.get('ocr_pool_ids', '[]'))
     return settings
 
 
-@router.get("/settings")
-def settings_page(request: Request):
+def render_settings(request, test_result=None):
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
@@ -67,9 +78,23 @@ def settings_page(request: Request):
             "settings": get_settings_context(),
             "message": None,
             "key_error": request.query_params.get('key_error'),
-            "test_result": None,
+            "test_result": test_result,
+            "build": running_build(),
+            "repository": REPOSITORY,
+            "release_check": getattr(request.app.state, "release_check", None),
         },
     )
+
+
+@router.get("/settings")
+def settings_page(request: Request):
+    return render_settings(request)
+
+
+@router.post("/settings/check-updates")
+def check_updates(request: Request):
+    request.app.state.release_check = check_releases(running_build()["version"])
+    return RedirectResponse("/settings#about", 303)
 
 
 @router.post("/settings")
@@ -98,10 +123,15 @@ async def save_settings(request: Request):
             value = re.sub(r'[^\w ,.-]', '', value)[:100] or 'Noto Naskh Arabic'
         if field == 'model': value = value or 'gemini-3.1-flash-lite'
         values[column] = value
-    if 'pool_present' in form:
-        known = {k['id'] for k in list_keys()}
-        values['ocr_pool_ids'] = json.dumps([key for key in form.getlist('pool_ids') if key in known])
     with connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        if 'pool_present' in form:
+            known = {k['id'] for k in list_keys()}
+            values['ocr_pool_ids'] = json.dumps([key for key in form.getlist('pool_ids') if key in known])
+            previous = db.execute("SELECT value FROM settings WHERE key='ocr_pool_ids'").fetchone()
+            if set(json.loads(previous[0]) if previous else []) != set(json.loads(values['ocr_pool_ids'])):
+                # Match the checkbox UI even without JavaScript: changed membership selects pool mode.
+                values['ocr_key_mode'] = 'pool'
         db.executemany('INSERT OR REPLACE INTO settings VALUES (?,?)', values.items())
     if form.get('active_key_id'): set_active_key(str(form['active_key_id']))
     # Redirect ensures the base template reads the newly committed preferences.
@@ -122,15 +152,6 @@ def test_gemini(request: Request):
             for row in db.execute("SELECT * FROM settings")
         }
 
-    model = (
-        settings.get("gemini_model")
-        or "gemini-3.1-flash-lite"
-    )
-
-    thinking = (
-        settings.get("thinking_level")
-        or "minimal"
-    )
     lang = settings.get('ui_language', 'ar')
 
     if not key:
@@ -143,28 +164,16 @@ def test_gemini(request: Request):
             result = {'en':'✅ Gemini key is valid and the connection works.','fa':'✅ کلید Gemini معتبر است و اتصال برقرار است.','ar':'✅ مفتاح Gemini صالح والاتصال يعمل.'}.get(lang)
 
         except Exception as exc:
-            error_text = ""
-
-            # Never expose an API key if somehow included in an exception.
-            if key:
-                error_text = error_text.replace(key, "[API KEY HIDDEN]")
-
             kind = classify_gemini_error(exc)
             labels = {
                 'quota_exhausted': {'ar':'⚠️ حصة Gemini مستنفدة.', 'en':'⚠️ Gemini quota is exhausted.', 'fa':'⚠️ سهمیه Gemini تمام شده است.'},
                 'rate_limited': {'ar':'⚠️ تم الوصول إلى حد الطلبات مؤقتًا. حاول لاحقًا.', 'en':'⚠️ Temporarily rate limited. Try again later.', 'fa':'⚠️ موقتاً به حد درخواست‌ها رسیدید. بعداً دوباره تلاش کنید.'},
+                'permission_denied': {'ar':'رفض Gemini الوصول. تحقق من أذونات المشروع.', 'en':'Gemini denied access. Check project permissions.', 'fa':'دسترسی رد شد. مجوزهای پروژه را بررسی کنید.'},
                 'invalid_key': {'ar':'❌ مفتاح Gemini غير صالح.', 'en':'❌ Gemini API key is invalid.', 'fa':'❌ کلید Gemini نامعتبر است.'},
-                'transient': {'ar':'❌ تعذر الوصول إلى Gemini بسبب مشكلة اتصال.', 'en':'❌ Could not reach Gemini because of a connection problem.', 'fa':'❌ دسترسی به Gemini به دلیل مشکل اتصال ممکن نیست.'},
+                'network_error': {'ar':'❌ تعذر الوصول إلى Gemini بسبب مشكلة اتصال.', 'en':'❌ Could not reach Gemini because of a connection problem.', 'fa':'❌ دسترسی به Gemini به دلیل مشکل اتصال ممکن نیست.'},
             }
             friendly = labels.get(kind, {'ar':'❌ حدث خطأ في خدمة Gemini.', 'en':'❌ Gemini service error.', 'fa':'❌ خطای سرویس Gemini.'})[lang]
-            result = Markup(f'{escape(friendly)}<details><summary>التفاصيل التقنية</summary><pre>{escape(type(exc).__name__ + ": " + error_text[:1000])}</pre></details>')
+            result = friendly
 
-    return templates.TemplateResponse(
-        request=request,
-        name="settings.html",
-        context={
-            "settings": get_settings_context(),
-            "message": None,
-            "test_result": result,
-        },
-    )
+
+    return render_settings(request, test_result=result)

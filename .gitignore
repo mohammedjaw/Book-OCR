@@ -53,3 +53,14 @@ build/
 Thumbs.db
 config/*
 !config/.gitkeep
+
+# Local audit notes can identify private libraries and machine paths.
+/IMPLEMENTATION_REPORT.md
+/PROJECT_TECHNICAL_CONTEXT.md
+backups/
+*.pending
+*.safetensors
+*.gguf
+*.onnx
+*.pt
+*.pth

@@ -16,7 +16,9 @@
 <form method="post" action="/books/{{book.book_uuid}}/ocr" class="single-page-form"><label>{{tr('page')}}<input name="page_number" type="number" min="1" max="{{book.page_count}}" value="1" required></label><button>{{tr('start')}}</button></form>
 </div>
 <div class="card"><a class="button" href="/books/{{book.book_uuid}}/download/pdf">{{tr('original_pdf')}}</a>
-<div id="exports" {% if counts.completed != book.page_count %}hidden{% endif %}>{% for ext,label in [('docx','Word'),('json','JSON'),('package','Book-OCR ZIP')] %}<a class="button" href="/books/{{book.book_uuid}}/export/{{ext}}">{{label}}</a>{% endfor %}</div></div>
+<div id="text-exports" {% if not text_ready %}hidden{% endif %}><p>{{tr('partial_text_help')}}</p><a class="button" href="/books/{{book.book_uuid}}/export/md">{{tr('partial_text')}} (.md)</a> <a class="button" href="/books/{{book.book_uuid}}/export/txt">{{tr('partial_text')}} (.txt)</a></div>
+<a class="button" href="/books/{{book.book_uuid}}/export/package">Book-OCR ZIP (PDF + pages; incomplete books: v2)</a>
+<div id="exports" {% if counts.completed != book.page_count %}hidden{% endif %}>{% for ext,label in [('docx','Word'),('json','JSON')] %}<a class="button" href="/books/{{book.book_uuid}}/export/{{ext}}">{{label}}</a>{% endfor %}</div></div>
 <a class="button danger" href="/books/{{book.book_uuid}}/delete">{{tr('delete')}}</a>
 <script id="status-labels" type="application/json">{{labels|tojson}}</script><script src="/static/js/book-status.js" defer></script>
 {% endblock %}

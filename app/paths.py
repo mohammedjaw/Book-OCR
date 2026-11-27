@@ -32,6 +32,9 @@ EXPORTS_ROOT = DATA_ROOT / "exports"
 
 
 def version() -> str:
+    if getattr(sys, "frozen", False):
+        from _book_ocr_build import METADATA
+        return METADATA["version"]
     try:
         return (ASSET_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     except OSError:

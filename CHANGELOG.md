@@ -1,3 +1,14 @@
+# Version 0.3.0
+
+- Export available book and collection text as TXT or Markdown during OCR. Exports preserve page order and identify unfinished pages.
+- Export and resume incomplete individual books with portable package format v2. Complete books retain format v1. Collection packages still require all volumes to be complete.
+- Remove a saved Gemini key with confirmation. The scheduler drops deleted and deselected keys, and selects another enabled key when the active one is removed.
+- Encrypted backups now capture the effective SQLite pool. Replace restores the backed-up mode and membership. Merge retains an existing library's selection and imports the backed-up selection into an empty key store.
+- OCR waits across workers during HTTP 503 outages, honors cooldowns, and preserves unfinished pages when keys are exhausted. Connection tests distinguish network failures, denied access, invalid credentials, and rate limits.
+- Settings displays build provenance and offers an explicit GitHub release check in Arabic, English, and Persian.
+
+The previous Windows release was [v0.2.3, September 15, 2026](https://github.com/mohammedjaw/Book-OCR/releases/tag/v0.2.3), at commit `d6fab8d82ad2241b28f2946bc6cad26098fa57d9`. See the [rollback instructions](ROLLBACK.md).
+
 # Version 0.1.0
 - Initial local Arabic digital library
 - PDF import and duplicate detection
